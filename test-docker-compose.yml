@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  registry:
+    image: distribution/distribution:2.8.3
+    labels:
+      abwart.enable: true
+      abwart.rule.test.revisions: 2
+      abwart.rule.test.schedule: 1/4 * * * * *
+      abwart.default.revisions: 10
+      abwart.default.schedule: 0 2 * * * * *
+    # the registry is put in host-network for testing purposes
+    network_mode: host

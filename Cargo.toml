@@ -1,0 +1,23 @@
+[package]
+name = "abwart"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+futures = { version = "0.3"}
+tokio = { version = "1.0", features = ["full"]}
+reqwest = { version = "0.11.22", features = ["default", "json"] }
+thiserror = "1.0.50"
+serde_json = "1.0.108"
+serde = { version = "1.0.193", features = ["derive"]}
+chrono = { version = "0.4.31", features = ["serde"]}
+duration-string = "0.3.0"
+log = "0.4.20"
+regex = "1.10.2"
+bollard = { version = "0.15.0", features = ["chrono"]}
+env_logger = "0.10.1"
+tokio-cron-scheduler = { version = "0.9.4", features = ["default"]}
+cron = "0.12.0"
