@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use bollard::Docker;
 use bollard::exec::{CreateExecOptions, StartExecOptions};
 use bollard::models::{ContainerSummary, EventActor};
 use bollard::secret::EndpointSettings;
 use chrono::Duration;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use regex::Regex;
 use crate::api::distribution::Distribution;
 use crate::api::DistributionConfig;
@@ -24,6 +24,7 @@ pub struct Instance {
     pub default_age_min: Option<Duration>,
     pub default_schedule: String,
     pub rules: HashMap<String, Rule>,
+    pub port: u16,
     client: Arc<Docker>
 }
 
@@ -36,6 +37,7 @@ impl Instance {
         let mut default_schedule = DEFAULT_SCHEDULE.to_string();
         let mut network = None;
         let mut rules = HashMap::new();
+        let mut port = 5000u16;
 
         if networks.is_empty() {
             return Err(Error::NoNetwork(name))
@@ -54,11 +56,18 @@ impl Instance {
             if let Some(schedule) = labels.get(&label("default.schedule")) {
                 default_schedule = parse_schedule(schedule.as_str(), None);
             }
-            if let Some(nw) = labels.get(&label("network")) {
-                if networks.contains_key(nw) {
-                    network = Some(nw.clone())
+            if let Some(custom_network) = labels.get(&label("network")) {
+                if networks.contains_key(custom_network) {
+                    network = Some(custom_network.clone())
                 } else {
-                    warn!("Received network '{nw}' which doesn't exist on container. Using default instead")
+                    warn!("Received network '{custom_network}' which doesn't exist on container. Using default instead")
+                }
+            }
+            if let Some(custom_port) = labels.get(&label("port")) {
+                if let Ok(custom_port) = custom_port.parse::<u16>(){
+                    port = custom_port
+                } else {
+                    warn!("Received invalid custom port value '{custom_port}'. Expected positive 16-bit integer. Using default ({port}) instead")
                 }
             }
             rules = parse_rules(labels, default_age_max, default_age_min, default_revisions, default_schedule.clone());
@@ -77,23 +86,26 @@ impl Instance {
         }
 
         let ip;
-        if let Some(network) = network {
+        if let Some(network) = &network {
             ip = networks.get(network.as_str()).expect("Network should exist").ip_address.clone();
         } else {
             ip = networks.values().next().expect("There should be at least one network").ip_address.clone()
         }
-        let mut address = ip.unwrap_or(String::from("127.0.0.1:5000"));
+        let mut address = ip.unwrap_or(String::from("127.0.0.1"));
         if address.is_empty() {
-            address = String::from("127.0.0.1:5000")
+            address = String::from("127.0.0.1")
         }
 
-        let distribution = DistributionConfig::new(address, None, None, true);
+        let distribution = DistributionConfig::new(format!("{address}:{port}"), None, None, true);
 
+        // containers started in a docker compose deployment start with a `/` which can be removed for aesthetic reasons
         if name.starts_with('/') {
             name = name[1..name.len()].to_string()
         }
 
-        Ok(Self{ id, name, rules, default_revisions, default_age_min, default_age_max, distribution, default_schedule, client })
+        debug!("Registered new registry '{name}' with: {address}:{port} ({network:?}) {rules:?} {default_revisions} {default_age_min:?} {default_age_max:?} {default_schedule}");
+
+        Ok(Self{ id, port, name, rules, default_revisions, default_age_min, default_age_max, distribution, default_schedule, client })
     }
 
     pub async fn from_actor(actor: EventActor, client: Arc<Docker>) -> Result<Instance, Error> {
@@ -142,18 +154,27 @@ impl Instance {
             .map(|(_, rule)| rule)
             .collect::<Vec<&Rule>>();
 
+        let mut affected_repositories = HashSet::new();
+        let mut deleted_tags = 0;
         for rule in rules {
             let repositories = rule.affected_repositories(&repositories);
+            affected_repositories.extend(repositories.iter().map(|r| r.name.clone()));
             for repository in repositories {
                 let mut tags = repository.get_tags_with_data().await?;
                 let affected_tags = rule.affected_tags(&mut tags);
                 for tag in affected_tags {
                     info!("Deleting tag '{}' from repository '{}' in registry '{}'", tag.name, repository.name, self.name);
                     repository.delete_manifest(&tag.digest).await?;
+                    deleted_tags += 1;
                 }
             }
         }
 
+        info!("Deleted {deleted_tags} tags from {} repositories in registry '{}'", affected_repositories.len(), self.name);
+
+        // TODO: Add some kind of config option whether the garbage collector should run when no tags were deleted
+        // for some scenarios it would still be beneficial e.g. when one always only updates the :latest tag which produces
+        // untagged blobs which only would get cleaned up when this config is set to true
         let exec = self.client.create_exec(self.id.as_str(), CreateExecOptions::<&str>{
             cmd: Some(vec!["/bin/registry", "garbage-collect", "--delete-untagged", "/etc/docker/registry/config.yml"]),
             user: Some("root"),

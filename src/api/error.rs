@@ -8,7 +8,7 @@ pub enum ApiError {
     #[error("Found invalid header value for header '{0}'")]
     InvalidHeaderValue(String),
 
-    #[error("There was an error during the request")]
+    #[error("There was an error during the request: {0}")]
     RequestError(#[from] reqwest::Error),
 
     #[error("Received error from api: '{0}'")]

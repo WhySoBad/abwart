@@ -7,7 +7,7 @@ use regex::Regex;
 
 pub const DEFAULT_REVISIONS: usize = 15;
 /// Per default the schedule is set to daily at midnight
-pub const DEFAULT_SCHEDULE: &str = "0 0 * * *";
+pub const DEFAULT_SCHEDULE: &str = "0 0 * * * * *";
 
 /// Parse a revisions label. Should the label value not be a valid revisions count
 /// the provided or the global default (`DEFAULT_REVISIONS`) is returned as fallback

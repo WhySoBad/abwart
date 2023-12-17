@@ -1,0 +1,5 @@
+target
+.idea
+.gitignore
+Dockerfile
+test-docker-compose.yml

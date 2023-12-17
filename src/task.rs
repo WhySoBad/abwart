@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use log::{error, info};
+use log::{debug, error, info};
 use tokio_cron_scheduler::{Job, JobScheduler};
 use crate::error::Error;
 use crate::instance::Instance;
@@ -49,7 +49,7 @@ impl Task {
                  info!("Successfully started task for registry '{name}'");
             }
             rx.recv().await;
-            info!("Interrupting task for registry '{name}'");
+            debug!("Interrupting task for registry '{name}'");
             sched.shutdown().await.unwrap();
         });
 

@@ -3,11 +3,23 @@ version: '3.8'
 services:
   registry:
     image: distribution/distribution:2.8.3
+    ports:
+      - '5000:5000'
     labels:
       abwart.enable: true
       abwart.rule.test.revisions: 2
-      abwart.rule.test.schedule: 1/4 * * * * *
+      abwart.rule.test.schedule: 1/30 * * * * *
       abwart.default.revisions: 10
       abwart.default.schedule: 0 2 * * * * *
-    # the registry is put in host-network for testing purposes
-    network_mode: host
+      abwart.network: test
+    networks:
+      - test
+
+  abwart:
+    image: abwart:local
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+  test:
+    name: test

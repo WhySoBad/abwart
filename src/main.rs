@@ -17,20 +17,22 @@ use log::{error, warn};
 use crate::instance::Instance;
 use crate::scheduler::Scheduler;
 
-// https://github.com/opencontainers/distribution-spec/blob/v1.0.1/spec.md
-// https://github.com/opencontainers/distribution-spec/issues/212
-// https://github.com/opencontainers/runtime-spec/blob/main/config.md
-
-// https://docs.docker.com/engine/reference/commandline/events/
-
 pub const NAME: &str = "abwart";
 
 #[tokio::main]
 async fn main() {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let docker;
+    let docker: Arc<Docker>;
     match Docker::connect_with_unix_defaults() {
-        Ok(client) => docker = Arc::new(client),
+        Ok(client) => {
+            match client.ping().await {
+                Ok(_) => docker = Arc::new(client),
+                Err(_) => {
+                    error!("Ping to docker client failed");
+                    exit(1)
+                }
+            }
+        },
         Err(err) => {
             error!("Unable to connect to docker socket. Reason: {err}");
             exit(1)
@@ -77,7 +79,7 @@ async fn main() {
                 let actor = message.actor.expect("Actor should exist");
                 let action = message.action.unwrap_or_default();
                 match action.as_str() {
-                    "stop" | "pause" => {
+                    "stop" | "pause" | "kill" => {
                         match actor.id {
                             Some(id) => scheduler.deschedule_instance(id).await,
                             None => println!("Unable to request deschedule of registry. Reason: {}", error::Error::MissingId)
