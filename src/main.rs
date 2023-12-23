@@ -1,10 +1,11 @@
 mod instance;
 mod scheduler;
-mod policy;
 mod error;
 mod task;
 mod rule;
 mod api;
+mod policies;
+#[cfg(test)] mod test;
 
 use bollard::container::ListContainersOptions;
 use bollard::system::EventsOptions;
@@ -13,7 +14,8 @@ use futures::StreamExt;
 use std::collections::HashMap;
 use std::process::exit;
 use std::sync::Arc;
-use log::{error, warn};
+use bollard::service::EventMessage;
+use log::{error, info, warn};
 use crate::instance::Instance;
 use crate::scheduler::Scheduler;
 
@@ -44,15 +46,17 @@ async fn main() {
 
     let mut scheduler = Scheduler::new();
 
-    let containers = docker.list_containers(Some(ListContainersOptions {
-            filters: filters.clone(),
-            ..ListContainersOptions::default()
-        })).await.map_err(|err| error!("Unable to get existing running registries. Reason: {err}"))
+    let options = ListContainersOptions {
+        filters,
+        ..ListContainersOptions::default()
+    };
+    let containers = docker.list_containers(Some(options)).await
+        .map_err(|err| error!("Unable to get existing running registries. Reason: {err}"))
         .unwrap_or_default();
 
     for container in containers {
         if !&container.image.clone().unwrap_or_default().starts_with("distribution/distribution") {
-            warn!("Found running container which is enabled and doesn't use image distribution/distribution. Ignoring container");
+            warn!("Found running container which is enabled and doesn't use image 'distribution/distribution'. Ignoring container");
             continue;
         }
         match Instance::from_container(container, docker.clone()) {
@@ -61,6 +65,12 @@ async fn main() {
         }
     }
 
+    subscribe_events(docker, scheduler).await;
+}
+
+async fn subscribe_events(docker: Arc<Docker>, mut scheduler: Scheduler) {
+    let mut filters = HashMap::new();
+    filters.insert(String::from("label"), vec![format!("{}=true", label("enable"))]);
     filters.insert(String::from("image"), vec![String::from("distribution/distribution")]);
     filters.insert(String::from("type"), vec![String::from("container")]);
 
@@ -73,25 +83,9 @@ async fn main() {
     while let Some(event) = events.next().await {
         match event {
             Ok(message) => {
-                if message.actor.is_none() {
-                    warn!("Event message is missing actor. Ignoring message");
-                };
-                let actor = message.actor.expect("Actor should exist");
-                let action = message.action.unwrap_or_default();
-                match action.as_str() {
-                    "stop" | "pause" | "kill" => {
-                        match actor.id {
-                            Some(id) => scheduler.deschedule_instance(id).await,
-                            None => println!("Unable to request deschedule of registry. Reason: {}", error::Error::MissingId)
-                        }
-                    }
-                    "start" | "unpause" => {
-                        match Instance::from_actor(actor, docker.clone()).await {
-                            Ok(instance) => scheduler.schedule_instance(instance).await,
-                            Err(err) => error!("Unable to add new registry to schedule. Reason: {err}")
-                        }
-                    }
-                    _ => {}
+                let result = handle_event(message, &mut scheduler, docker.clone()).await;
+                if let Err(err) = result {
+                    info!("{err}")
                 }
             }
             Err(err) => warn!("Received event error: {err}")
@@ -99,10 +93,31 @@ async fn main() {
     }
 }
 
-/// Format a label which is associated with the program to omit repeating the name
+async fn handle_event(message: EventMessage, scheduler: &mut Scheduler, docker: Arc<Docker>) -> Result<(), String> {
+    let actor = message.actor.ok_or(String::from("Event message is missing actor. Ignoring message"))?;
+    let action = message.action.ok_or(String::from("Event message is missing action. Ignoring message"))?;
+    match action.as_str() {
+        "stop" | "pause" | "kill" => {
+            match actor.id {
+                Some(id) => scheduler.deschedule_instance(id).await,
+                None => println!("Unable to request deschedule of registry. Reason: {}", error::Error::MissingId)
+            }
+        }
+        "start" | "unpause" => {
+            match Instance::from_actor(actor, docker.clone()).await {
+                Ok(instance) => scheduler.schedule_instance(instance).await,
+                Err(err) => error!("Unable to add new registry to schedule. Reason: {err}")
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Format a LABEL which is associated with the program to omit repeating the name
 /// # Example
 /// ```
-/// assert_eq!(label("rule.age.max"), "abwart.rule.age.max");
+/// assert_eq!(LABEL("rule.age.max"), "abwart.rule.age.max");
 /// ```
 pub fn label(suffix: &str) -> String {
     format!("{NAME}.{suffix}")

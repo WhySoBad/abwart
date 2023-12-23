@@ -14,6 +14,7 @@ impl Task {
         Self { instance: Arc::new(instance), tx: None }
     }
 
+    /// Start the scheduling process for all unique cron times of an instance
     pub async fn start(&mut self) -> Result<(), Error> {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
         self.tx = Some(tx.clone());
@@ -56,6 +57,7 @@ impl Task {
         Ok(())
     }
 
+    /// Stop the scheduling process for all unique cron times of an instance
     pub async fn stop(&mut self) -> Result<(), Error> {
         let name = self.instance.name.clone();
         if let Some(tx) = &mut self.tx {

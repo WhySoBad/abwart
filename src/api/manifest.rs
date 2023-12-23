@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use crate::api::layer::Layer;
 use crate::api::repository::Repository;
@@ -9,9 +10,9 @@ use crate::api::error::ApiError;
 use crate::api::request::handle_response;
 
 #[derive(Debug, Clone)]
-pub struct Manifest<'a> {
-    pub repository: &'a Repository<'a>,
-    config: &'a DistributionConfig,
+pub struct Manifest {
+    pub repository: Arc<Repository>,
+    config: Arc<DistributionConfig>,
     pub manifest_config: Layer,
     pub schema_version: u32,
     pub media_type: String,
@@ -19,15 +20,15 @@ pub struct Manifest<'a> {
     pub digest: String,
 }
 
-impl<'a> Manifest<'a> {
+impl Manifest {
     pub fn new(
         schema_version: u32,
         media_type: String,
         layers: Vec<Layer>,
-        repository: &'a Repository,
+        repository: Arc<Repository>,
         manifest_config: Layer,
         digest: String,
-        config: &'a DistributionConfig,
+        config: Arc<DistributionConfig>,
     ) -> Self {
         Self {
             schema_version,
@@ -54,23 +55,23 @@ impl<'a> Manifest<'a> {
 }
 
 #[derive(Debug)]
-pub struct ManifestList<'a> {
-    pub repository: &'a Repository<'a>,
-    config: &'a DistributionConfig,
+pub struct ManifestList {
+    pub repository: Arc<Repository>,
+    config: Arc<DistributionConfig>,
     pub digest: String,
     pub schema_version: u32,
     pub media_type: String,
     pub manifests: Vec<Layer>,
 }
 
-impl<'a> ManifestList<'a> {
+impl ManifestList {
     pub fn new(
         schema_version: u32,
         media_type: String,
         manifests: Vec<Layer>,
-        repository: &'a Repository,
+        repository: Arc<Repository>,
         digest: String,
-        config: &'a DistributionConfig,
+        config: Arc<DistributionConfig>,
     ) -> Self {
         Self {
             schema_version,
@@ -102,10 +103,10 @@ impl<'a> ManifestList<'a> {
             manifest.schema_version,
             manifest.media_type,
             manifest.layers,
-            self.repository,
+            self.repository.clone(),
             manifest.config,
             digest,
-            self.config,
+            self.config.clone(),
         ))
     }
 
@@ -121,9 +122,9 @@ impl<'a> ManifestList<'a> {
 }
 
 #[derive(Debug)]
-pub enum ManifestResponse<'a> {
-    ManifestList(ManifestList<'a>),
-    Manifest(Manifest<'a>),
+pub enum ManifestResponse {
+    ManifestList(ManifestList),
+    Manifest(Manifest),
 }
 
 /// **Note:** <br>

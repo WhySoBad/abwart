@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::api::manifest::{Manifest, ManifestList, ManifestResponse};
 use crate::api::{get_request_client, DistributionConfig, INDEX_CONTENT_TYPE, MANIFEST_CONTENT_TYPE};
 use crate::api::{ApiManifest, ApiManifestList, ApiTags};
@@ -7,13 +8,13 @@ use serde_json::Value;
 use crate::api::tag::Tag;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct Repository<'a> {
+pub struct Repository {
     pub name: String,
-    config: &'a DistributionConfig,
+    config: Arc<DistributionConfig>,
 }
 
-impl<'a> Repository<'a> {
-    pub fn new(repo: String, config: &'a DistributionConfig) -> Self {
+impl Repository {
+    pub fn new(repo: String, config: Arc<DistributionConfig>) -> Self {
         Self { name: repo, config }
     }
 
@@ -65,10 +66,10 @@ impl<'a> Repository<'a> {
                     manifest.schema_version,
                     manifest.media_type,
                     manifest.layers,
-                    self,
+                    Arc::new(self.clone()),
                     manifest.config,
                     digest,
-                    self.config,
+                    self.config.clone(),
                 )))
             } else {
                 // we have a multi-arch manifest list (aka OCI index)
@@ -78,9 +79,9 @@ impl<'a> Repository<'a> {
                     index.schema_version,
                     index.media_type,
                     index.manifests,
-                    self,
+                    Arc::new(self.clone()),
                     digest,
-                    self.config,
+                    self.config.clone(),
                 )))
             }
         } else {

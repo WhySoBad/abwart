@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::api::repository::Repository;
 use crate::api::ApiCatalog;
 use crate::api::DistributionConfig;
@@ -5,12 +6,12 @@ use crate::api::error::ApiError;
 use crate::api::request::{get_follow_path, handle_response};
 
 #[derive(Debug)]
-pub struct Distribution<'a> {
-    config: &'a DistributionConfig,
+pub struct Distribution {
+    config: Arc<DistributionConfig>,
 }
 
-impl<'a> Distribution<'a> {
-    pub fn new(config: &'a DistributionConfig) -> Self {
+impl Distribution {
+    pub fn new(config: Arc<DistributionConfig>) -> Self {
         Self { config }
     }
 
@@ -31,7 +32,7 @@ impl<'a> Distribution<'a> {
                 &mut body
                     .repositories
                     .into_iter()
-                    .map(|repo| Repository::new(repo, self.config))
+                    .map(|repo| Repository::new(repo, self.config.clone()))
                     .collect::<Vec<_>>(),
             );
         }

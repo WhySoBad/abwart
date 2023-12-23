@@ -16,7 +16,8 @@ services:
       - test
 
   abwart:
-    image: abwart:local
+    build:
+      dockerfile: Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
