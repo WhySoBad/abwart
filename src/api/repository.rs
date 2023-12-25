@@ -69,7 +69,6 @@ impl Repository {
                     Arc::new(self.clone()),
                     manifest.config,
                     digest,
-                    self.config.clone(),
                 )))
             } else {
                 // we have a multi-arch manifest list (aka OCI index)

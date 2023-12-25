@@ -4,7 +4,6 @@ use crate::api::repository::Repository;
 use crate::policies::{AffectionType, Policy};
 
 pub const PATTERN_LABEL: &str = "pattern";
-pub const DEFAULT_PATTERN: Option<Regex> = None;
 
 /// Policy to match all repositories whose name matches the provided
 /// regex pattern
@@ -16,7 +15,7 @@ pub const DEFAULT_PATTERN: Option<Regex> = None;
 /// // `<chars>` is any alphanumeric character sequence of length >= 1
 /// let affected = policy.affects(&repositories);
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PatternPolicy {
     pattern: Option<Regex>
 }
@@ -57,6 +56,10 @@ impl Policy<Repository> for PatternPolicy {
 
     fn id(&self) -> &'static str {
         PATTERN_LABEL
+    }
+
+    fn enabled(&self) -> bool {
+        self.pattern.is_some()
     }
 }
 

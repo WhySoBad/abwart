@@ -4,45 +4,47 @@ use bollard::Docker;
 use bollard::exec::{CreateExecOptions, StartExecOptions};
 use bollard::models::{ContainerSummary, EventActor};
 use bollard::secret::EndpointSettings;
-use chrono::Duration;
 use log::{debug, error, info, warn};
+use regex::Regex;
 use crate::api::distribution::Distribution;
 use crate::api::DistributionConfig;
 use crate::error::Error;
-use crate::label;
-use crate::policies::age_max::AgeMaxPolicy;
-use crate::policies::age_min::AgeMinPolicy;
-use crate::policies::pattern::PatternPolicy;
-use crate::policies::revision::RevisionPolicy;
-use crate::rule::{parse_rules, Rule};
+use crate::{label, NAME};
+use crate::policies::age_max::{AGE_MAX_LABEL, AgeMaxPolicy};
+use crate::policies::age_min::{AGE_MIN_LABEL, AgeMinPolicy};
+use crate::policies::pattern::{PATTERN_LABEL, PatternPolicy};
+use crate::policies::revision::{REVISION_LABEL, RevisionPolicy};
+use crate::rule::{parse_rule, parse_schedule, Rule};
 
 #[derive(Debug)]
 pub struct Instance {
     pub name: String,
     pub id: String,
     pub distribution: DistributionConfig,
-    pub default_revisions: usize,
-    pub default_age_max: Option<Duration>,
-    pub default_age_min: Option<Duration>,
-    pub default_schedule: String,
+    pub default_rule: Rule,
     pub rules: HashMap<String, Rule>,
     pub port: u16,
     client: Arc<Docker>
 }
 
+const RULE_REGEX: &str = "rule.(?<name>[a-z]+)";
+const DEFAULT_RULE_REGEX: &str = "default";
+const POLICY_NAME_REGEX: &str = "(?<policy>[a-z\\.]+)";
+/// Per default the schedule is set to daily at midnight
+const DEFAULT_SCHEDULE: &str = "0 0 * * * * *";
+
 impl Instance {
     pub fn new(id: String, mut name: String, labels: HashMap<String, String>, networks: HashMap<String, EndpointSettings>, client: Arc<Docker>) -> Result<Self, Error> {
-        // TODO: Check whether for actors outside scope "LOCAL" secure would make sense
         let mut network = None;
-        let mut rules = HashMap::new();
         let mut port = 5000u16;
-        // FIXME: Implement the default behavior handling
-        let mut default_repository_policies = HashMap::new();
-        let mut default_tag_policies = HashMap::new();
+        // TODO: Check whether for actors outside scope "LOCAL" secure would make sense
+        let mut distribution = DistributionConfig::new(String::new(), None, None, true);
 
         if networks.is_empty() {
             return Err(Error::NoNetwork(name))
         }
+
+        let (default_rule, rules) = Instance::parse_rules(&id, &labels);
 
         if !labels.is_empty() {
             if let Some(custom_network) = labels.get(&label("network")) {
@@ -59,45 +61,32 @@ impl Instance {
                     warn!("Received invalid custom port value '{custom_port}'. Expected positive 16-bit integer. Using default ({port}) instead")
                 }
             }
-
-            // TODO: Do rule parsing in a better place
-            rules = parse_rules(labels, default_schedule.clone());
+            distribution.username = labels.get(&label("username")).cloned();
+            distribution.password = labels.get(&label("password")).cloned();
         } else {
             info!("Using default instance attributes");
         }
 
-        // FIXME: This should be possible without having the always-there rule
-        if rules.is_empty() {
-            let mut default_rule = Rule::new(format!("{}-{}-default", name, &id[0..8]));
-            default_rule.tag_policies.push(Box::new(RevisionPolicy::from(default_revisions)));
-            default_rule.tag_policies.push(Box::new(AgeMinPolicy::from(default_age_min)));
-            default_rule.tag_policies.push(Box::new(AgeMaxPolicy::from(default_age_max)));
-            default_rule.repository_policies.push(Box::<PatternPolicy>::default());
-            default_rule.schedule = default_schedule.clone();
-            rules.insert(default_rule.name.clone(), default_rule);
-        }
-
-        let ip;
-        if let Some(network) = &network {
-            ip = networks.get(network.as_str()).expect("Network should exist").ip_address.clone();
-        } else {
-            ip = networks.values().next().expect("There should be at least one network").ip_address.clone()
-        }
-        let mut address = ip.unwrap_or(String::from("127.0.0.1"));
+        let mut address = match &network {
+            Some(network) => networks.get(network.as_str()).expect("Network should exist").ip_address.clone(),
+            None => networks.values().next().expect("There should be at least one network").ip_address.clone()
+        }.unwrap_or(String::from("127.0.0.1"));
         if address.is_empty() {
             address = String::from("127.0.0.1")
         }
 
-        let distribution = DistributionConfig::new(format!("{address}:{port}"), None, None, true);
+        distribution.host = format!("{address}:{port}");
 
-        // containers started in a docker compose deployment start with a `/` which can be removed for aesthetic reasons
         if name.starts_with('/') {
+            // containers started in a docker compose deployment start with a `/` which can be removed for aesthetic reasons
             name = name[1..name.len()].to_string()
         }
 
-        debug!("Registered new registry '{name}' with: {address}:{port} ({network:?}) {rules:?} {default_revisions} {default_age_min:?} {default_age_max:?} {default_schedule}");
+        debug!("Registered new registry '{name}' with: {address}:{port} ({network:?}) {rules:?} {default_rule:?}");
 
-        Ok(Self{ id, port, name, rules, default_revisions, default_age_min, default_age_max, distribution, default_schedule, client })
+        let mut instance = Self{ id, port, name, rules, default_rule, distribution, client };
+        instance.apply_defaults();
+        Ok(instance)
     }
 
     pub async fn from_actor(actor: EventActor, client: Arc<Docker>) -> Result<Instance, Error> {
@@ -111,6 +100,85 @@ impl Instance {
         let id = container.id.ok_or(Error::MissingId)?;
         let name = container.names.unwrap_or(Vec::new()).get(0).unwrap_or(&id).clone();
         Self::new(id, name, container.labels.unwrap_or_default(), container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
+    }
+
+
+    /// Apply the `default_tag_policies`, `default_repository_policies` and `default_schedule` to the rules in the current instance
+    fn apply_defaults(&mut self) {
+        self.rules.iter_mut().for_each(|(_, rule)| {
+            self.default_rule.tag_policies.iter().for_each(|(name, policy)| {
+                if !rule.tag_policies.contains_key(name) {
+                    rule.tag_policies.insert(name, policy.clone());
+                }
+            });
+            self.default_rule.repository_policies.iter().for_each(|(name, policy)| {
+                if !rule.repository_policies.contains_key(name) {
+                    rule.repository_policies.insert(name, policy.clone());
+                }
+            });
+            if rule.schedule.is_empty() {
+                rule.schedule = self.default_rule.schedule.clone()
+            }
+        });
+    }
+
+    fn get_default_rule_pattern() -> Regex {
+        Regex::new(format!("{NAME}.{DEFAULT_RULE_REGEX}.{POLICY_NAME_REGEX}").as_str()).expect("Default rule pattern should be valid")
+    }
+
+    fn get_rule_pattern() -> Regex {
+        Regex::new(format!("{NAME}.{RULE_REGEX}.{POLICY_NAME_REGEX}").as_str()).expect("Rule pattern should be valid")
+    }
+
+    /// Parse all rules including the default rule from the instance configuration
+    fn parse_rules(id: &str, labels: &HashMap<String, String>) -> (Rule, HashMap<String, Rule>) {
+        let mut rule_labels = HashMap::new();
+        let mut rules = HashMap::new();
+        let default_schedule = parse_schedule(DEFAULT_SCHEDULE).expect("Default schedule should be valid cron schedule");
+
+        let rule_pattern = Instance::get_rule_pattern();
+        let default_rule_pattern = Instance::get_default_rule_pattern();
+        let default_rule_name = id.to_string();
+        let mut default_rule = Rule::new(default_rule_name.clone());
+        default_rule.repository_policies.insert(PATTERN_LABEL, Box::<PatternPolicy>::default());
+        default_rule.tag_policies.insert(AGE_MAX_LABEL, Box::<AgeMaxPolicy>::default());
+        default_rule.tag_policies.insert(AGE_MIN_LABEL, Box::<AgeMinPolicy>::default());
+        default_rule.tag_policies.insert(REVISION_LABEL, Box::<RevisionPolicy>::default());
+
+        // parse default rules
+        labels.iter()
+            .filter_map(|(key, value)| rule_pattern.captures(key).map(|captures| (captures["name"].to_string(), captures["policy"].to_string(), value)))
+            .for_each(|(name, key, value)| {
+                let entry = rule_labels.entry(name).or_insert(vec![]);
+                entry.push((key, value));
+            });
+
+        // parse default policies
+        labels.iter()
+            .filter_map(|(key, value)| default_rule_pattern.captures(key).map(|captures| (captures["policy"].to_string(), value)))
+            .for_each(|(key, value)| {
+                let entry = rule_labels.entry(default_rule_name.clone()).or_insert(vec![]);
+                entry.push((key, value))
+            });
+
+
+        for (name, labels) in rule_labels {
+            let is_default = default_rule_name.eq(&name);
+            let rule = parse_rule(name.clone(), labels);
+            if let Some(rule) = rule {
+                if is_default {
+                    default_rule.tag_policies.extend(rule.tag_policies);
+                    default_rule.repository_policies.extend(rule.repository_policies);
+                    if default_rule.schedule.is_empty() {
+                        default_rule.schedule = default_schedule.clone();
+                    }
+                } else {
+                    rules.insert(name, rule);
+                }
+            }
+        }
+
+        (default_rule, rules)
     }
 
     /// Get all rules of the instance in a bundled format where the keys are the cron schedules and the values
@@ -156,8 +224,6 @@ impl Instance {
             for repository in repositories {
                 let tags = tag_cache.entry(repository.name.clone()).or_insert(repository.get_tags_with_data().await?);
                 let affected_tags = rule.affected_tags(tags.clone());
-                println!("{tags:?}, {}", repository.name);
-                println!("Affected: {affected_tags:?}");
                 for tag in &affected_tags {
                     info!("Deleting tag '{}' from repository '{}' in registry '{}'", tag.name, repository.name, self.name);
                     repository.delete_manifest(&tag.digest).await?;
@@ -169,11 +235,12 @@ impl Instance {
             }
         }
 
-        info!("Deleted {deleted_tags} tags from {} repositories in registry '{}'", affected_repositories.len(), self.name);
+        if deleted_tags == 0 {
+            info!("Left all repositories in registry '{}' unmodified", self.name)
+        } else {
+            info!("Deleted {deleted_tags} tags from {} repositories in registry '{}'", affected_repositories.len(), self.name);
+        }
 
-        // TODO: Add some kind of config option whether the garbage collector should run when no tags were deleted
-        // TODO: for some scenarios it would still be beneficial e.g. when one always only updates the :latest tag which produces
-        // TODO: untagged blobs which only would get cleaned up when this config is set to true
         let exec = self.client.create_exec(self.id.as_str(), CreateExecOptions::<&str>{
             cmd: Some(vec!["/bin/registry", "garbage-collect", "--delete-untagged", "/etc/docker/registry/config.yml"]),
             user: Some("root"),
@@ -193,4 +260,20 @@ impl Instance {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::instance::Instance;
+
+    #[test]
+    fn test_rule_pattern() {
+        Instance::get_rule_pattern();
+    }
+
+    #[test]
+    fn test_default_rule_pattern() {
+        Instance::get_default_rule_pattern();
+    }
+}
+
 

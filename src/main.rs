@@ -114,10 +114,10 @@ async fn handle_event(message: EventMessage, scheduler: &mut Scheduler, docker: 
     Ok(())
 }
 
-/// Format a LABEL which is associated with the program to omit repeating the name
+/// Format a label which is associated with the program to omit repeating the name
 /// # Example
 /// ```
-/// assert_eq!(LABEL("rule.age.max"), "abwart.rule.age.max");
+/// assert_eq!(label("rule.age.max"), "abwart.rule.age.max");
 /// ```
 pub fn label(suffix: &str) -> String {
     format!("{NAME}.{suffix}")

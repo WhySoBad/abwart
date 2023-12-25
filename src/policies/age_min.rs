@@ -4,7 +4,6 @@ use crate::api::tag::Tag;
 use crate::policies::{AffectionType, parse_duration, Policy};
 
 pub const AGE_MIN_LABEL: &str = "age.min";
-pub const DEFAULT_AGE_MIN: Option<Duration> = None;
 
 /// Policy to match all tags which have at least a given age
 /// # Example
@@ -14,21 +13,17 @@ pub const DEFAULT_AGE_MIN: Option<Duration> = None;
 /// // returns only these tags which are at least 5 minutes old
 /// let affected = policy.affects(&tags);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AgeMinPolicy {
     age: Option<Duration>
 }
 
 impl AgeMinPolicy {
     pub fn new(value: String) -> Self {
-        let age = parse_duration(value);
+        let age = parse_duration(value.clone());
         if age.is_none() {
             info!("Received invalid min age duration '{value}'")
         }
-        Self { age }
-    }
-
-    pub fn from(age: Option<Duration>) -> Self {
         Self { age }
     }
 }
@@ -49,6 +44,10 @@ impl Policy<Tag> for AgeMinPolicy {
 
     fn id(&self) -> &'static str {
         AGE_MIN_LABEL
+    }
+
+    fn enabled(&self) -> bool {
+        self.age.is_some()
     }
 }
 
@@ -74,7 +73,7 @@ mod test {
     #[test]
     pub fn test_keeping() {
         let tags = get_current_tags();
-        let policy = AgeMinPolicy::from(Some(Duration::minutes(10)));
+        let policy = AgeMinPolicy { age: Some(Duration::minutes(10)) };
         assert!(policy.age.is_some());
         assert_eq!(policy.affects(tags.clone()), vec![tags[1].clone(), tags[4].clone()])
     }
@@ -82,7 +81,7 @@ mod test {
     #[test]
     pub fn test_in_future() {
         let tags = get_current_tags();
-        let policy = AgeMinPolicy::from(Some(Duration::days(10)));
+        let policy = AgeMinPolicy { age: Some(Duration::days(10)) };
         assert!(policy.age.is_some());
         assert_eq!(policy.affects(tags.clone()), tags)
     }

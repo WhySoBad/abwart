@@ -47,10 +47,10 @@ pub struct ApiManifest {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct DistributionConfig {
-    host: String,
-    username: Option<String>,
-    password: Option<String>,
-    insecure: bool,
+    pub host: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub insecure: bool,
 }
 
 impl DistributionConfig {

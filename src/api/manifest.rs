@@ -12,7 +12,6 @@ use crate::api::request::handle_response;
 #[derive(Debug, Clone)]
 pub struct Manifest {
     pub repository: Arc<Repository>,
-    config: Arc<DistributionConfig>,
     pub manifest_config: Layer,
     pub schema_version: u32,
     pub media_type: String,
@@ -28,14 +27,12 @@ impl Manifest {
         repository: Arc<Repository>,
         manifest_config: Layer,
         digest: String,
-        config: Arc<DistributionConfig>,
     ) -> Self {
         Self {
             schema_version,
             digest,
             media_type,
             layers,
-            config,
             repository,
             manifest_config,
         }
@@ -106,7 +103,6 @@ impl ManifestList {
             self.repository.clone(),
             manifest.config,
             digest,
-            self.config.clone(),
         ))
     }
 

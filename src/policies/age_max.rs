@@ -4,7 +4,6 @@ use crate::api::tag::Tag;
 use crate::policies::{AffectionType, parse_duration, Policy};
 
 pub const AGE_MAX_LABEL: &str = "age.max";
-pub const DEFAULT_AGE_MIN: Option<Duration> = None;
 
 /// Policy to match all tags older than a given duration
 /// # Example
@@ -14,21 +13,17 @@ pub const DEFAULT_AGE_MIN: Option<Duration> = None;
 /// // returns all tags which are older than 30 days
 /// let affected = policy.affects(&tags);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AgeMaxPolicy {
     age: Option<Duration>
 }
 
 impl AgeMaxPolicy {
     pub fn new(value: String) -> Self {
-        let age = parse_duration(value);
+        let age = parse_duration(value.clone());
         if age.is_none() {
             info!("Received invalid max age duration '{value}'")
         }
-        Self { age }
-    }
-
-    pub fn from(age: Option<Duration>) -> Self {
         Self { age }
     }
 }
@@ -49,6 +44,10 @@ impl Policy<Tag> for AgeMaxPolicy {
 
     fn id(&self) -> &'static str {
         AGE_MAX_LABEL
+    }
+
+    fn enabled(&self) -> bool {
+        self.age.is_some()
     }
 }
 
@@ -74,7 +73,7 @@ mod test {
     #[test]
     pub fn test_keeping() {
         let tags = get_current_tags();
-        let policy = AgeMaxPolicy::from(Some(Duration::minutes(10)));
+        let policy = AgeMaxPolicy { age: Some(Duration::minutes(10)) };
         assert!(policy.age.is_some());
         assert_eq!(policy.affects(tags.clone()), vec![tags[0].clone(), tags[2].clone(), tags[3].clone(), tags[5].clone()])
     }
@@ -82,7 +81,7 @@ mod test {
     #[test]
     pub fn test_in_future() {
         let tags = get_current_tags();
-        let policy = AgeMaxPolicy::from(Some(Duration::days(10)));
+        let policy = AgeMaxPolicy { age: Some(Duration::days(10)) };
         assert!(policy.age.is_some());
         assert_eq!(policy.affects(tags), vec![])
     }

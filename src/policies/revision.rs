@@ -3,18 +3,17 @@ use crate::api::tag::Tag;
 use crate::policies::{AffectionType, Policy, parse_integer};
 
 pub const REVISION_LABEL: &str = "revisions";
-pub const DEFAULT_REVISIONS: Option<usize> = Some(15);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RevisionPolicy {
     revisions: Option<usize>
 }
 
 impl RevisionPolicy {
     pub fn new(value: String) -> Self {
-        match parse_integer(value) {
+        match parse_integer(value.clone()) {
             Some(revisions) => {
-                if revisions <= 0 {
+                if revisions == 0 {
                     info!("Received invalid revisions value '{revisions}'. Expected non-zero positive integer");
                     Self { revisions: None }
                 } else {
@@ -27,20 +26,17 @@ impl RevisionPolicy {
             }
         }
     }
-
-    pub fn from(revisions: usize) -> Self {
-        Self { revisions: Some(revisions) }
-    }
 }
 
 impl Policy<Tag> for RevisionPolicy {
     fn affects(&self, mut elements: Vec<Tag>) -> Vec<Tag> {
-        elements.sort_by(|t1, t2| t1.created.cmp(&t2.created).reverse());
+        elements.sort_by(|t1, t2| t1.created.cmp(&t2.created));
         if let Some(revisions) = self.revisions {
             if elements.len() > revisions {
-                elements.into_iter().take(revisions).collect()
+                let length = elements.len();
+                elements.into_iter().take(length - revisions).collect()
             } else {
-                elements
+                vec![]
             }
         } else {
             vec![]
@@ -54,6 +50,16 @@ impl Policy<Tag> for RevisionPolicy {
 
     fn id(&self) -> &'static str {
         REVISION_LABEL
+    }
+
+    fn enabled(&self) -> bool {
+        self.revisions.is_some()
+    }
+}
+
+impl Default for RevisionPolicy {
+    fn default() -> Self {
+        Self { revisions: Some(15) }
     }
 }
 
@@ -77,11 +83,27 @@ mod test {
     }
 
     #[test]
-    pub fn test_keeping() {
+    pub fn test_keeping_three() {
         let tags = get_current_tags();
-        let policy = RevisionPolicy::from(3);
+        let policy = RevisionPolicy { revisions: Some(3) };
         assert!(policy.revisions.is_some());
-        assert_eq!(policy.affects(tags.clone()), vec![tags[4].clone(), tags[1].clone(), tags[3].clone()])
+        assert_eq!(policy.affects(tags.clone()), vec![tags[0].clone(), tags[5].clone(), tags[2].clone()])
+    }
+
+    #[test]
+    pub fn test_keeping_one() {
+        let tags = get_current_tags();
+        let policy = RevisionPolicy { revisions: Some(1) };
+        assert!(policy.revisions.is_some());
+        assert_eq!(policy.affects(tags.clone()), vec![tags[0].clone(), tags[5].clone(), tags[2].clone(), tags[3].clone(), tags[1].clone()])
+    }
+
+    #[test]
+    pub fn test_keeping_more() {
+        let tags = get_current_tags();
+        let policy = RevisionPolicy { revisions: Some(10) };
+        assert!(policy.revisions.is_some());
+        assert_eq!(policy.affects(tags), vec![])
     }
 
     #[test]

@@ -1,40 +1,40 @@
 use std::collections::{HashMap, HashSet};
-use log::{info, warn};
-use regex::Regex;
+use std::str::FromStr;
+use cron::Schedule;
+use log::{debug, info, warn};
 use crate::api::repository::Repository;
 use crate::api::tag::Tag;
-use crate::NAME;
-use crate::policies::{AffectionType, DEFAULT_SCHEDULE, parse_schedule, Policy};
+use crate::policies::{AffectionType, PolicyMap};
 use crate::policies::age_min::{AGE_MIN_LABEL, AgeMinPolicy};
 use crate::policies::age_max::{AGE_MAX_LABEL, AgeMaxPolicy};
 use crate::policies::pattern::{PATTERN_LABEL, PatternPolicy};
 use crate::policies::revision::{REVISION_LABEL, RevisionPolicy};
 
-const RULE_REGEX: &str = "rule.(?<name>[a-z]+).(?<policy>[a-z\\.]+)";
-
 #[derive(Debug)]
 pub struct Rule {
     pub name: String,
-    pub repository_policies: Vec<Box<dyn Policy<Repository>>>,
-    pub tag_policies: Vec<Box<dyn Policy<Tag>>>,
+    pub repository_policies: PolicyMap<Repository>,
+    pub tag_policies: PolicyMap<Tag>,
     pub schedule: String,
 }
 
 impl Rule{
     pub fn new(name: String) -> Self {
-        Self { name, repository_policies: vec![], tag_policies: vec![], schedule: DEFAULT_SCHEDULE.to_string() }
+        Self { name, repository_policies: HashMap::new(), tag_policies: HashMap::new(), schedule: String::new() }
     }
 
     /// Get all repositories which are affected by the current rule
     pub fn affected_repositories(&self, repositories: Vec<Repository>) -> Vec<Repository> {
         let mut requirements = Vec::new();
         let mut affected = HashSet::new();
-        for repository_policy in &self.repository_policies {
-            if repository_policy.affection_type() == AffectionType::Requirement {
-                requirements.push(repository_policy);
+        for policy in self.repository_policies.values() {
+            if policy.affection_type() == AffectionType::Requirement {
+                requirements.push(policy);
                 continue
             }
-            affected.extend(repository_policy.affects(repositories.clone()))
+            let affects = policy.affects(repositories.clone());
+            debug!("Policy '{}' affected {} repositories", policy.id(), affects.len());
+            affected.extend(affects)
         }
 
         let mut affected = affected.into_iter().collect::<Vec<_>>();
@@ -52,12 +52,14 @@ impl Rule{
         let mut requirements = Vec::new();
         let mut affected = HashSet::new();
         tags.sort_by(|t1, t2| t1.created.cmp(&t2.created).reverse());
-        for tag_policy in &self.tag_policies {
-            if tag_policy.affection_type() == AffectionType::Requirement {
-                requirements.push(tag_policy);
+        for policy in self.tag_policies.values() {
+            if policy.affection_type() == AffectionType::Requirement {
+                requirements.push(policy);
                 continue
             }
-            affected.extend(tag_policy.affects(tags.clone()))
+            let affects = policy.affects(tags.clone());
+            debug!("Policy '{}' affected {} tags", policy.id(), affects.len());
+            affected.extend(affects)
         }
 
         let mut affected = affected.into_iter().collect::<Vec<_>>();
@@ -71,63 +73,55 @@ impl Rule{
     }
 }
 
-/// Parse a list of LABEL key-value-paris into rules. All rule labels have to match `{NAME}.{RULE_REGEX}`. <br>
-/// The method accepts some defaults for when being called within an `Instance` constructor.
-pub fn parse_rules(labels: HashMap<String, String>, default_schedule: String) -> HashMap<String, Rule> {
-    let target_pattern = Regex::new(format!("{NAME}.{RULE_REGEX}").as_str()).expect("Rule pattern should be valid");
-    let mut rules = HashMap::new();
-
-    for (key, value) in labels {
-        let Some(captures) = target_pattern.captures(key.as_str()) else {
-            continue
-        };
-        let name = captures["name"].to_string();
-        let entry = rules.entry(name.clone()).or_insert(Rule::new(name.clone()));
-        let policy = &captures["policy"];
-        if policy == "schedule" {
-            entry.schedule = parse_schedule(value.as_str()).unwrap_or_else(|| {
-                println!("Using default schedule '{default_schedule}'");
-                default_schedule.clone()
-            });
-            continue
-        }
-        match policy {
+/// Parse a rule by all it's associated labels. Returns `None` should the parsed rule neither contain
+/// any tag policies nor any repository policies
+pub fn parse_rule(name: String, policies: Vec<(String, &String)>) -> Option<Rule> {
+    let mut rule = Rule::new(name.clone());
+    policies.into_iter().for_each(|(policy_name, value)| {
+        match policy_name.as_str() {
+            "schedule" => {
+                rule.schedule = parse_schedule(value.as_str()).unwrap_or_default()
+            },
             AGE_MAX_LABEL => {
-                entry.tag_policies.push(Box::new(AgeMaxPolicy::new(value)))
+                rule.tag_policies.insert(AGE_MAX_LABEL, Box::new(AgeMaxPolicy::new(value.clone())));
             },
             AGE_MIN_LABEL => {
-                entry.tag_policies.push(Box::new(AgeMinPolicy::new(value)))
+                rule.tag_policies.insert(AGE_MIN_LABEL, Box::new(AgeMinPolicy::new(value.clone())));
             },
             PATTERN_LABEL => {
-                entry.repository_policies.push(Box::new(PatternPolicy::new(value.as_str())))
+                rule.repository_policies.insert(PATTERN_LABEL, Box::new(PatternPolicy::new(value)));
             },
             REVISION_LABEL => {
-                entry.tag_policies.push(Box::new(RevisionPolicy::new(value)))
+                rule.tag_policies.insert(REVISION_LABEL, Box::new(RevisionPolicy::new(value.clone())));
             },
             other => {
                 warn!("Found unknown policy '{other}' for rule '{name}'. Ignoring policy")
             }
-        }
-    }
-
-    rules.retain(|name, value| {
-       if value.tag_policies.is_empty() && value.repository_policies.is_empty() {
-           info!("Rule {name} doesn't contain any rules. Ignoring rule");
-           false
-       } else {
-           true
-       }
+        };
     });
 
-    rules
+    if rule.tag_policies.is_empty() && rule.repository_policies.is_empty() {
+        info!("Rule {name} doesn't contain any policies. Ignoring rule");
+        None
+    } else {
+        Some(rule)
+    }
+}
+
+/// Parse a cron schedule string
+/// # Example
+/// ```
+/// // cron format: <sec> <min> <hour> <day of month> <month> <day of week> <year>
+/// let daily_at_midnight = "0 0 * * * * *";
+pub fn parse_schedule(schedule_str: &str) -> Option<String> {
+    if Schedule::from_str(schedule_str).is_ok() {
+        Some(schedule_str.to_string())
+    } else {
+        warn!("Received invalid schedule '{schedule_str}'");
+        None
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
-    fn get_labels() -> HashMap<String, String> {
-        let labels = HashMap::new();
-        labels
-    }
 }

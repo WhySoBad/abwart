@@ -10,7 +10,7 @@ services:
       abwart.rule.test.revisions: 2
       abwart.rule.test.schedule: 1/30 * * * * *
       abwart.default.revisions: 10
-      abwart.default.schedule: 0 2 * * * * *
+      abwart.default.schedule: 0 2 * * * *
       abwart.network: test
     networks:
       - test
@@ -20,6 +20,8 @@ services:
       dockerfile: Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - test
 
 networks:
   test:
