@@ -117,7 +117,9 @@ pub fn parse_schedule(schedule_str: &str) -> Option<String> {
     if Schedule::from_str(schedule_str).is_ok() {
         Some(schedule_str.to_string())
     } else {
-        warn!("Received invalid schedule '{schedule_str}'");
+        if !schedule_str.is_empty() {
+            warn!("Received invalid schedule '{schedule_str}'");
+        }
         None
     }
 }

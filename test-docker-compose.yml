@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   registry:
+    container_name: "bruh"
     image: distribution/distribution:2.8.3
     ports:
       - '5000:5000'

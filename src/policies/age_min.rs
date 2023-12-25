@@ -20,11 +20,15 @@ pub struct AgeMinPolicy {
 
 impl AgeMinPolicy {
     pub fn new(value: String) -> Self {
-        let age = parse_duration(value.clone());
-        if age.is_none() {
-            info!("Received invalid min age duration '{value}'")
+        if value.is_empty() {
+            Self { age: None }
+        } else {
+            let age = parse_duration(value.clone());
+            if age.is_none() {
+                info!("Received invalid min age duration '{value}'")
+            }
+            Self { age }
         }
-        Self { age }
     }
 }
 

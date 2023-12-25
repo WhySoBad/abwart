@@ -1,0 +1,11 @@
+registries:
+  test_distribution:
+    default:
+      age.min:
+      age.max:
+      revisions: 10
+      schedule: 1/5 * * * * *
+    rule:
+      test:
+        age.min: 20s
+        schedule:

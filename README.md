@@ -7,3 +7,4 @@
 - [ ] Add docs
 - [ ] Add configuration whether the garbage collector should be run inside the container
 - [ ] Add tests to rule parsing and rule affections
+- [ ] Add ping to registry container in instance creation

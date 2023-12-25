@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use bollard::Docker;
 use bollard::exec::{CreateExecOptions, StartExecOptions};
 use bollard::models::{ContainerSummary, EventActor};
@@ -10,6 +10,7 @@ use crate::api::distribution::Distribution;
 use crate::api::DistributionConfig;
 use crate::error::Error;
 use crate::{label, NAME};
+use crate::config::Config;
 use crate::policies::age_max::{AGE_MAX_LABEL, AgeMaxPolicy};
 use crate::policies::age_min::{AGE_MIN_LABEL, AgeMinPolicy};
 use crate::policies::pattern::{PATTERN_LABEL, PatternPolicy};
@@ -78,7 +79,7 @@ impl Instance {
         distribution.host = format!("{address}:{port}");
 
         if name.starts_with('/') {
-            // containers started in a docker compose deployment start with a `/` which can be removed for aesthetic reasons
+            // the `/` in the container name can be removed for aesthetic reasons
             name = name[1..name.len()].to_string()
         }
 
@@ -89,17 +90,27 @@ impl Instance {
         Ok(instance)
     }
 
-    pub async fn from_actor(actor: EventActor, client: Arc<Docker>) -> Result<Instance, Error> {
+    pub async fn from_actor(actor: EventActor, client: Arc<Docker>, config: Arc<Mutex<Config>>) -> Result<Instance, Error> {
         let id = actor.id.ok_or(Error::MissingId)?;
         let container = client.inspect_container(id.as_str(), None).await.map_err(|_| Error::InexistentContainer(id.clone()))?;
-        let name = container.name.unwrap_or(id.clone());
-        Self::new(id, name, actor.attributes.unwrap_or_default(), container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
+        let name = container.name.unwrap_or(id.clone())[1..].to_string();
+        let registry_config = config.lock().map_err(|_| Error::ConfigLockError())?.get_registry(&name).unwrap_or_default();
+        let mut labels = actor.attributes.unwrap_or_default();
+        labels.extend(registry_config);
+        Self::new(id, name, labels, container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
     }
 
-    pub fn from_container(container: ContainerSummary, client: Arc<Docker>) -> Result<Instance, Error> {
+    pub fn from_container(container: ContainerSummary, client: Arc<Docker>, config: Arc<Mutex<Config>>) -> Result<Instance, Error> {
         let id = container.id.ok_or(Error::MissingId)?;
-        let name = container.names.unwrap_or(Vec::new()).get(0).unwrap_or(&id).clone();
-        Self::new(id, name, container.labels.unwrap_or_default(), container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
+        let name = container.names.unwrap_or(Vec::new()).get(0).unwrap_or(&id).clone()[1..].to_string();
+        let registry_config = config.lock().map_err(|_| Error::ConfigLockError())?.get_registry(&name).unwrap_or_default();
+        let mut labels = container.labels.unwrap_or_default();
+        labels.extend(registry_config);
+        Self::new(id, name, labels, container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
+    }
+
+    pub fn apply_config(&mut self, config: &Config) {
+
     }
 
 

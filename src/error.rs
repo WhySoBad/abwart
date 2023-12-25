@@ -24,5 +24,8 @@ pub enum Error {
     TaskCreationFailed(String, String),
 
     #[error("There was an api error: {0}")]
-    ApiError(#[from] ApiError)
+    ApiError(#[from] ApiError),
+
+    #[error("The shared config cannot be locked")]
+    ConfigLockError()
 }
