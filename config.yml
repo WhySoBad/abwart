@@ -1,5 +1,5 @@
 registries:
-  test_distribution:
+  test-registry:
     default:
       age.min:
       age.max:
@@ -7,5 +7,5 @@ registries:
       schedule: 1/5 * * * * *
     rule:
       test:
-        age.min: 20s
+        age.min: 30s
         schedule:

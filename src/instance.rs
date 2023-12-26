@@ -109,11 +109,6 @@ impl Instance {
         Self::new(id, name, labels, container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
     }
 
-    pub fn apply_config(&mut self, config: &Config) {
-
-    }
-
-
     /// Apply the `default_tag_policies`, `default_repository_policies` and `default_schedule` to the rules in the current instance
     fn apply_defaults(&mut self) {
         self.rules.iter_mut().for_each(|(_, rule)| {
@@ -161,7 +156,7 @@ impl Instance {
             .filter_map(|(key, value)| rule_pattern.captures(key).map(|captures| (captures["name"].to_string(), captures["policy"].to_string(), value)))
             .for_each(|(name, key, value)| {
                 let entry = rule_labels.entry(name).or_insert(vec![]);
-                entry.push((key, value));
+                entry.push((key, value.as_str()));
             });
 
         // parse default policies
@@ -169,7 +164,7 @@ impl Instance {
             .filter_map(|(key, value)| default_rule_pattern.captures(key).map(|captures| (captures["policy"].to_string(), value)))
             .for_each(|(key, value)| {
                 let entry = rule_labels.entry(default_rule_name.clone()).or_insert(vec![]);
-                entry.push((key, value))
+                entry.push((key, value.as_str()))
             });
 
 

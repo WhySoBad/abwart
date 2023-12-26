@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 use log::{error, info, warn};
 use notify::{RecommendedWatcher, RecursiveMode};
-use notify_debouncer_mini::{Debouncer, new_debouncer_opt};
+use notify_debouncer_mini::{DebouncedEventKind, Debouncer, new_debouncer_opt};
 use serde::Deserialize;
 use crate::NAME;
 
@@ -70,7 +70,7 @@ pub fn watch_config(sender: tokio::sync::mpsc::Sender<Config>) -> Result<(), not
     let (tx, rx) = std::sync::mpsc::channel::<notify_debouncer_mini::DebounceEventResult>();
     let watch_config = notify_debouncer_mini::Config::default()
         .with_batch_mode(true)
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(Duration::from_secs(5))
         .with_notify_config(notify::Config::default());
     let mut debouncer: Debouncer<RecommendedWatcher> = new_debouncer_opt(watch_config, tx)?;
 
@@ -81,20 +81,17 @@ pub fn watch_config(sender: tokio::sync::mpsc::Sender<Config>) -> Result<(), not
         // and closing the channel
         let _file_watcher = debouncer;
         for res in &rx {
-            // FIXME: The events are currently sent multiple times for the same thing
-            let mut events = vec![];
-            while let Ok(event) = rx.try_recv() {
-                events.push(event);
-            }
             match res {
-                Ok(_) => {
-                    match Config::parse() {
-                        Ok(config) => {
-                            futures::executor::block_on(async {
-                                sender.send(config).await.expect("Channel should be open");
-                            })
-                        },
-                        Err(err) => error!("Error whilst parsing updated config. Reason: {err}")
+                Ok(events) => {
+                    if events.iter().any(|event| event.kind == DebouncedEventKind::Any) {
+                        match Config::parse() {
+                            Ok(config) => {
+                                futures::executor::block_on(async {
+                                    sender.send(config).await.expect("Channel should be open");
+                                })
+                            },
+                            Err(err) => error!("Error whilst parsing updated config. Reason: {err}")
+                        }
                     }
                 },
                 Err(err) => warn!("Received error whilst watching static configuration file. Reason: {err}")

@@ -14,18 +14,15 @@ use bollard::system::EventsOptions;
 use bollard::{API_DEFAULT_VERSION, Docker};
 use futures::StreamExt;
 use std::collections::HashMap;
-use std::path::Path;
 use std::process::exit;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use bollard::service::EventMessage;
 use log::{error, info, warn};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::select;
 use crate::config::{Config, watch_config};
 use crate::error::Error;
 use crate::instance::Instance;
-use crate::scheduler::Scheduler;
+use crate::scheduler::{DescheduleReason, Scheduler, ScheduleReason};
 
 pub const NAME: &str = "abwart";
 
@@ -33,7 +30,6 @@ pub const NAME: &str = "abwart";
 async fn main() {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    println!("{:?}", Config::parse().expect("BRUH").get_registries());
     let docker: Arc<Docker>;
     match Docker::connect_with_unix("/var/run/docker.sock", 30, API_DEFAULT_VERSION) {
         Ok(client) => {
@@ -83,7 +79,7 @@ async fn main() {
             continue;
         }
         match Instance::from_container(container, docker.clone(), config.clone()) {
-            Ok(instance) => scheduler.schedule_instance(instance).await,
+            Ok(instance) => scheduler.schedule_instance(instance, ScheduleReason::RegistryRunning).await,
             Err(err) => error!("Unable to add registry to schedule. Reason: {err}")
         }
     }
@@ -128,13 +124,13 @@ async fn handle_event(event: &Result<EventMessage, bollard::errors::Error>, sche
             match action.as_str() {
                 "stop" | "pause" | "kill" => {
                     match actor.id {
-                        Some(id) => { scheduler.deschedule_instance(id).await; },
+                        Some(id) => { scheduler.deschedule_instance(id, DescheduleReason::RegistryStop).await; },
                         None => println!("Unable to request deschedule of registry. Reason: {}", Error::MissingId)
                     }
                 }
                 "start" | "unpause" => {
                     match Instance::from_actor(actor, docker.clone(), config).await {
-                        Ok(instance) => scheduler.schedule_instance(instance).await,
+                        Ok(instance) => scheduler.schedule_instance(instance, ScheduleReason::RegistryStart).await,
                         Err(err) => error!("Unable to add new registry to schedule. Reason: {err}")
                     }
                 }
@@ -151,13 +147,7 @@ async fn handle_config_update(new_config: &Config, scheduler: &mut Scheduler, do
         Ok(mut config) => {
             let new_registries = new_config.get_registries();
             let updatable = config.get_registries().iter()
-                .filter(|(key, old_value)| {
-                    if let Some(new_value) = new_registries.get(*key) {
-                        old_value.ne(&new_value)
-                    } else {
-                        true
-                    }
-                })
+                .filter(|(key, old_value)| new_registries.get(*key).map_or(true, |v| old_value.ne(&v)))
                 .filter_map(|(key, _)| scheduler.get_instance(key))
                 .collect::<Vec<String>>();
 
@@ -165,30 +155,36 @@ async fn handle_config_update(new_config: &Config, scheduler: &mut Scheduler, do
             updatable
         }
         Err(err) => {
-            error!("Unable to read old config. Reason: {err}");
+            error!("Unable to lock old config. Reason: {err}");
             return
         }
     };
 
-    let mut filters = HashMap::new();
-    filters.insert(String::from("id"), updatable);
-    let options = ListContainersOptions {
-        filters,
-        ..ListContainersOptions::default()
-    };
+    if updatable.is_empty() {
+        info!("Received config update affecting no running instances")
+    } else {
+        info!("Received config update affecting {} running instances", updatable.len());
 
-    match docker.list_containers(Some(options)).await {
-        Ok(containers) => {
-            for container in containers {
-                let id = container.id.clone().unwrap_or_default();
-                scheduler.deschedule_instance(id).await;
-                match Instance::from_container(container, docker.clone(), config.clone()) {
-                    Ok(instance) => { scheduler.schedule_instance(instance).await; },
-                    Err(err) => error!("Unable to create instance from container. Reason: {err}")
+        let mut filters = HashMap::new();
+        filters.insert(String::from("id"), updatable);
+        let options = ListContainersOptions {
+            filters,
+            ..ListContainersOptions::default()
+        };
+
+        match docker.list_containers(Some(options)).await {
+            Ok(containers) => {
+                for container in containers {
+                    let id = container.id.clone().unwrap_or_default();
+                    scheduler.deschedule_instance(id, DescheduleReason::ConfigUpdate).await;
+                    match Instance::from_container(container, docker.clone(), config.clone()) {
+                        Ok(instance) => scheduler.schedule_instance(instance, ScheduleReason::ConfigUpdate).await,
+                        Err(err) => error!("Unable to create instance from container. Reason: {err}")
+                    }
                 }
-            }
-        },
-        Err(err) => error!("Unable to reflect config change. Cannot get containers. Reason: {err}")
+            },
+            Err(err) => error!("Unable to reflect config change. Cannot get containers. Reason: {err}")
+        }
     }
 }
 
