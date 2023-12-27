@@ -99,7 +99,7 @@ pub fn parse_rule(name: String, policies: Vec<(String, &str)>) -> Option<Rule> {
         };
     });
 
-    if rule.tag_policies.is_empty() && rule.repository_policies.is_empty() {
+    if rule.tag_policies.is_empty() && rule.repository_policies.is_empty() && rule.schedule.is_empty() {
         info!("Rule {name} doesn't contain any policies. Ignoring rule");
         None
     } else {
@@ -163,6 +163,20 @@ mod test {
     #[test]
     fn test_rule_without_labels() {
         assert!(parse_rule(String::from("test-rule"), vec![]).is_none())
+    }
+
+    #[test]
+    fn test_rule_with_only_schedule() {
+        let labels = get_labels(vec![
+            ("schedule", "* * * * 5 *")
+        ]);
+        let rule = parse_rule(String::from("test-rule"), labels);
+        assert!(rule.is_some());
+        let parsed = rule.unwrap();
+        assert_eq!(parsed.name, String::from("test-rule"));
+        assert_eq!(parsed.schedule, String::from("* * * * 5 *"));
+        assert_eq!(parsed.tag_policies.len(), 0);
+        assert_eq!(parsed.repository_policies.len(), 0);
     }
 
     #[test]

@@ -67,6 +67,11 @@ pub struct InstanceConfig {
 /// Watch the static configuration file at [`Config::path()`]. Any successful changes to the config file
 /// are through the channel where the updating of the instances takes place
 pub fn watch_config(sender: tokio::sync::mpsc::Sender<Config>) -> Result<(), notify::Error> {
+    if !Path::new(&Config::path()).exists() {
+        warn!("Found no static configuration file. Disabled hot reloading for static configuration file");
+        return Ok(())
+    }
+
     let (tx, rx) = std::sync::mpsc::channel::<notify_debouncer_mini::DebounceEventResult>();
     let watch_config = notify_debouncer_mini::Config::default()
         .with_batch_mode(true)

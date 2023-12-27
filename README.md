@@ -16,6 +16,13 @@ Features of abwart:
 * Easily deployable using docker
 * Support for multiple docker registries (who needs this?) with a single deployment
 
+## Installation
+
+The abwart docker image is hosted in the github container registry and can be run like this:
+```shell
+docker run -v /var/run/docker.sock:/var/run/docker.sock:ro ghcr.io/whysobad/abwart
+```
+
 ## Example
 
 ```yaml
@@ -43,7 +50,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 ```
 
-For more policies available have a look at the docs (**coming soon™**)
+For more policies available have a look at the [docs](docs/index.md)
 
 ## Contributing
 
@@ -55,8 +62,9 @@ to open a new issue or contribute to an open issue!
 ## TODOs
 - [ ] Add tests to `Instance`
 - [ ] Run tests in GitHub Actions
+- [ ] Publish a new image to ghcr when a new tag is created
 - [x] Add static configuration file which takes priority over label configuration. The file should have hot reload
-- [ ] Add docs
+- [x] Add docs
 - [ ] Add configuration whether the garbage collector should be run inside the container
 - [x] Add tests to rule parsing and rule affections
 - [ ] Add ping to registry container in instance creation
