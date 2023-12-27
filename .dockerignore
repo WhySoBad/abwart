@@ -1,5 +1,9 @@
 target
 .idea
 .gitignore
+docs
+.github
+config.yml
+README.md
 Dockerfile
 test-docker-compose.yml

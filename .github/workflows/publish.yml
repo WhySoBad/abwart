@@ -7,17 +7,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  cargo-test:
+    uses: ./.github/workflows/cargo-test.yml
+
   build-and-publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    needs:
+      - cargo-test
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up docker buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to the container registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -30,7 +38,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
 
       - name: Build and push
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
