@@ -61,8 +61,8 @@ to open a new issue or contribute to an open issue!
 
 ## TODOs
 - [ ] Add tests to `Instance`
-- [ ] Run tests in GitHub Actions
-- [ ] Publish a new image to ghcr when a new tag is created
+- [x] Run tests in GitHub Actions
+- [x] Publish a new image to ghcr when a new tag is created
 - [x] Add static configuration file which takes priority over label configuration. The file should have hot reload
 - [x] Add docs
 - [ ] Add configuration whether the garbage collector should be run inside the container

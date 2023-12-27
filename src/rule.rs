@@ -48,7 +48,7 @@ impl Rule{
     }
 
     /// Get all tags which are affected by the current rule
-    pub fn affected_tags(&self, mut tags: Vec<Tag>) -> Vec<Tag> {
+    pub fn affected_tags(&self, tags: Vec<Tag>) -> Vec<Tag> {
         let mut requirements = Vec::new();
         let mut affected = HashSet::new();
         for policy in self.tag_policies.values() {
