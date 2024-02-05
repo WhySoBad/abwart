@@ -3,14 +3,14 @@
 abwart is a blazing fast housekeeper for your docker container registry written in rust.
 
 You are selfhosting a docker registry and don't want to waste resources to images you no longer need? You prefer the lightweight nature of the
- `distribution/distribution` container registry over other solutions? Then abwart may be of interest for you!
+ `registry` container registry over other solutions? Then abwart may be of interest for you!
 It offers the functionality to add retention policies to your registry with easy-to-use configuration methods.
 
 Features of abwart:
 * Easily configurable over container labels or a static configuration file with hot reloading
 * Support for multiple fine-grained rules on a per-registry basis
 * Support for default policies on a per-registry basis
-* Support for docker distribution and OCI images
+* Support for docker registry and OCI images
 * Support for docker registries with http basic authentication or without any authentication
 * Automatic garbage collection inside the registry after tag deletion
 * Easily deployable using docker
@@ -30,7 +30,7 @@ version: '3.8'
 
 services:
   registry:
-    image: distribution/distribution:2.8.3
+    image: registry:2.8.3
     labels:
       abwart.enable: true
       # override the default tag revision count for images matching the `weekend` rule 

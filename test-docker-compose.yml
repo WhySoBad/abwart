@@ -3,7 +3,7 @@ version: '3.8'
 services:
   registry:
     container_name: "test-registry"
-    image: distribution/distribution:2.8.3
+    image: registry:2.8.3
     ports:
       # expose port '5000' for local debugging reasons
       - '5000:5000'

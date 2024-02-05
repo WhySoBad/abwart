@@ -31,7 +31,7 @@ docker run \
  --label abwart.default.schedule="0 2 * * * *" \
  --label abwart.rule.weekend.schedule="0 0 0 * * Sun,Sat" \
  --label abwart.rule.weekend.revisions=10 \
- distribution/distribution:2.8.3
+ registry:2.8.3
 ```
 
 Read more about the different configurations:

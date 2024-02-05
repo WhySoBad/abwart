@@ -74,9 +74,8 @@ async fn main() {
         .unwrap_or_default();
 
     for container in containers {
-        if !&container.image.clone().unwrap_or_default().starts_with("distribution/distribution") {
-            warn!("Found running container which is enabled and doesn't use image 'distribution/distribution'. Ignoring container");
-            continue;
+        if !&container.image.clone().unwrap_or_default().starts_with("registry") {
+            warn!("Potentially found running container which is enabled and doesn't use image 'registry'");
         }
         match Instance::from_container(container, docker.clone(), config.clone()) {
             Ok(instance) => scheduler.schedule_instance(instance, ScheduleReason::RegistryRunning).await,
@@ -90,7 +89,6 @@ async fn main() {
 async fn subscribe_events(docker: Arc<Docker>, config: Arc<Mutex<Config>>, mut scheduler: Scheduler) {
     let mut filters = HashMap::new();
     filters.insert(String::from("label"), vec![format!("{}=true", label("enable"))]);
-    filters.insert(String::from("image"), vec![String::from("distribution/distribution")]);
     filters.insert(String::from("type"), vec![String::from("container")]);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Config>(1);
 
