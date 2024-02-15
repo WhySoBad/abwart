@@ -9,17 +9,16 @@ services:
       - '5000:5000'
     labels:
       abwart.enable: true
-      # abwart.rule.test.revisions: 2
-      # abwart.rule.test.schedule: 1/30 * * * * *
+      abwart.rule.test.revisions: 2
+      abwart.rule.test.schedule: 0 0 1/5 * * *
       abwart.default.revisions: 10
       abwart.default.schedule: 1/30 * * * * *
       abwart.network: test
+      abwart.cleanup: 1/30 * * * * *
     networks:
       - test
 
   abwart:
-    environment:
-      RUST_LOG: debug
     build:
       dockerfile: Dockerfile
     volumes:

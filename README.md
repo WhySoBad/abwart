@@ -12,7 +12,7 @@ Features of abwart:
 * Support for default policies on a per-registry basis
 * Support for docker registry and OCI images
 * Support for docker registries with http basic authentication or without any authentication
-* Automatic garbage collection inside the registry after tag deletion
+* Automatic garbage collection inside the registry after tag deletion or with independent cleanup schedule
 * Easily deployable using docker
 * Support for multiple docker registries (who needs this?) with a single deployment
 
@@ -43,6 +43,8 @@ services:
       abwart.default.revisions: 10
       # apply policies every day at midnight UTC by default
       abwart.default.schedule: 0 0 0 * * *
+      # run the garbage collector every day at 01:00 o'clock UTC independent of any rules
+      abwart.cleanup: 0 0 1 * * *
 
   abwart:
     image: ghcr.io/whysobad/abwart

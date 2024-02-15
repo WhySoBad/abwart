@@ -25,6 +25,7 @@ pub struct Instance {
     pub default_rule: Rule,
     pub rules: HashMap<String, Rule>,
     pub port: u16,
+    pub cleanup_schedule: Option<String>,
     client: Arc<Docker>
 }
 
@@ -40,6 +41,7 @@ impl Instance {
         let mut port = 5000u16;
         // TODO: Check whether for actors outside scope "LOCAL" secure would make sense
         let mut distribution = DistributionConfig::new(String::new(), None, None, true);
+        let mut cleanup_schedule = None;
 
         if networks.is_empty() {
             return Err(Error::NoNetwork(name))
@@ -60,6 +62,13 @@ impl Instance {
                     port = custom_port
                 } else {
                     warn!("Received invalid custom port value '{custom_port}'. Expected positive 16-bit integer. Using default ({port}) instead")
+                }
+            }
+            if let Some(custom_cleanup_schedule) = labels.get(&label("cleanup")) {
+                if let Some(custom_cleanup_schedule) = parse_schedule(custom_cleanup_schedule) {
+                    cleanup_schedule = Some(custom_cleanup_schedule);
+                } else {
+                    warn!("Received invalid cleanup schedule '{custom_cleanup_schedule}'. Using none instead")
                 }
             }
             distribution.username = labels.get(&label("username")).cloned();
@@ -85,7 +94,7 @@ impl Instance {
 
         debug!("Registered new registry '{name}' with: {address}:{port} ({network:?}) {rules:?} {default_rule:?}");
 
-        let mut instance = Self{ id, port, name, rules, default_rule, distribution, client };
+        let mut instance = Self{ id, port, name, rules, default_rule, distribution, cleanup_schedule, client };
         instance.apply_defaults();
         Ok(instance)
     }
@@ -252,8 +261,16 @@ impl Instance {
             info!("Left all repositories in registry '{}' unmodified", self.name)
         } else {
             info!("Deleted {deleted_tags} tags from {} repositories in registry '{}'", affected_repositories.len(), self.name);
+            info!("Running post deletion cleanup in registry '{}'", self.name);
+            self.run_garbage_collector().await;
         }
 
+        Ok(())
+    }
+
+    /// Exec the `registry garbage-collect` utility in the registry container to clean up dangling blobs
+    pub async fn run_garbage_collector(&self) {
+        debug!("Running garbage collector in registry '{}'", self.name);
         let exec = self.client.create_exec(self.id.as_str(), CreateExecOptions::<&str>{
             cmd: Some(vec!["/bin/registry", "garbage-collect", "--delete-untagged", "/etc/docker/registry/config.yml"]),
             user: Some("root"),
@@ -269,8 +286,6 @@ impl Instance {
             },
             Err(err) => error!("Unable to create new exec in registry '{}'. Reason: {err}", self.name)
         }
-
-        Ok(())
     }
 }
 

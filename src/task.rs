@@ -47,6 +47,24 @@ impl Task {
             sched.add(job).await.map_err(|err| Error::TaskCreationFailed(name.clone(), err.to_string()))?;
         }
 
+        if let Some(cleanup_schedule) = &instance.cleanup_schedule {
+            debug!("Found cleanup schedule defined on registry '{name}'");
+            let instance = instance.clone();
+            let copy_name = copy_name.clone();
+            let job = Job::new_async(cleanup_schedule.as_str(), move |_uuid, mut _l| {
+                let instance = instance.clone();
+                let name = copy_name.clone();
+
+                Box::pin(async move {
+                    let next_tick = _l.next_tick_for_job(_uuid).await;
+                    debug!("Next automated cleanup for registry '{name}' is {:?}", next_tick.unwrap_or_default().unwrap_or_default());
+                    info!("Running automated cleanup in registry '{name}'");
+                    instance.run_garbage_collector().await;
+                })
+            }).map_err(|err| Error::TaskCreationFailed(name.clone(), err.to_string()))?;
+            sched.add(job).await.map_err(|err| Error::TaskCreationFailed(name.clone(), err.to_string()))?;
+        }
+
         tokio::spawn(async move {
             if let Err(err) = sched.start().await {
                 error!("Task for registry '{name}' couldn't be started. Reason: {err}");

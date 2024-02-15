@@ -1,7 +1,7 @@
 # Registry
 
 >[!IMPORTANT]
-> Currently abwart only supports `distribution/distribution` registries from version `v2.4.0` and above due to the reliance onto the 
+> Currently abwart only supports registries running the `registry` image from version `v2.4.0` and above due to the reliance onto the 
 > built in garbage collector. Support for other registries is not planned.
 
 A registry consists of a set of configurations. Most of the configuration options are [policies](policies.md) but there are a few registry-specific options as well:
@@ -13,6 +13,10 @@ this field. <br>
 It can be used to have one central abwart instance running with a specific network (e.g. `abwart-net`). All registries which should be
 managed by abwart then have to be in the same network and specify the name of the network in the `network` configuration field
 * `port`: The port on which the registry is reachable. By default, the registry api is expected to be available at port `5000`
+* `cleanup`: A cron schedule which specifies an interval in which the garbage collector should be run in the registry independent from any rules <br>
+This is especially useful when pushing images under the same tag in a CI/CD pipeline. In such a scenario the revision count for the image isn't increasing
+since the tag is simply overwritten. This can cause abwart to not trigger any deletions which can lead to big dangling binary blobs. <br>
+The `cleanup` field expects the same syntax as the `schedule` field described in the documentation about [rules](rule.md).
 
 ## Defaults
 
