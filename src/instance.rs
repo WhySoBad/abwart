@@ -28,11 +28,11 @@ pub struct Instance {
     client: Arc<Docker>
 }
 
-const RULE_REGEX: &str = "rule.(?<name>[a-z]+)";
+const RULE_REGEX: &str = "rule\\.(?<name>[a-z]+)";
 const DEFAULT_RULE_REGEX: &str = "default";
 const POLICY_NAME_REGEX: &str = "(?<policy>[a-z\\.]+)";
 /// Per default the schedule is set to daily at midnight
-const DEFAULT_SCHEDULE: &str = "0 0 * * * * *";
+const DEFAULT_SCHEDULE: &str = "0 0 0 * * * *";
 
 impl Instance {
     pub fn new(id: String, mut name: String, labels: HashMap<String, String>, networks: HashMap<String, EndpointSettings>, client: Arc<Docker>) -> Result<Self, Error> {
@@ -129,11 +129,11 @@ impl Instance {
     }
 
     fn get_default_rule_pattern() -> Regex {
-        Regex::new(format!("{NAME}.{DEFAULT_RULE_REGEX}.{POLICY_NAME_REGEX}").as_str()).expect("Default rule pattern should be valid")
+        Regex::new(format!("{NAME}\\.{DEFAULT_RULE_REGEX}\\.{POLICY_NAME_REGEX}").as_str()).expect("Default rule pattern should be valid")
     }
 
     fn get_rule_pattern() -> Regex {
-        Regex::new(format!("{NAME}.{RULE_REGEX}.{POLICY_NAME_REGEX}").as_str()).expect("Rule pattern should be valid")
+        Regex::new(format!("{NAME}\\.{RULE_REGEX}\\.{POLICY_NAME_REGEX}").as_str()).expect("Rule pattern should be valid")
     }
 
     /// Parse all rules including the default rule from the instance configuration
@@ -167,22 +167,28 @@ impl Instance {
                 entry.push((key, value.as_str()))
             });
 
+        debug!("Rule labels {rule_labels:?}");
 
         for (name, labels) in rule_labels {
             let is_default = default_rule_name.eq(&name);
             let rule = parse_rule(name.clone(), labels);
+            debug!("Parsed rule {rule:?} default? {is_default}");
             if let Some(rule) = rule {
                 if is_default {
                     default_rule.tag_policies.extend(rule.tag_policies);
                     default_rule.repository_policies.extend(rule.repository_policies);
-                    if default_rule.schedule.is_empty() {
+                    if rule.schedule.is_empty() {
                         default_rule.schedule = default_schedule.clone();
+                    } else {
+                        default_rule.schedule = rule.schedule;
                     }
                 } else {
                     rules.insert(name, rule);
                 }
             }
         }
+
+        debug!("Default rule {default_rule:?}");
 
         (default_rule, rules)
     }
@@ -207,6 +213,7 @@ impl Instance {
     /// All tags (on repositories) which match at least one of the rules will be deleted and
     /// additionally the garbage collector inside the registry will be run automatically
     pub async fn apply_rules(&self, rules: Vec<String>) -> Result<(), Error> {
+        debug!("Applying rules to registry '{}'", self.name);
         let distribution = Distribution::new(Arc::new(self.distribution.clone()));
         let repositories = distribution.get_repositories().await?;
 

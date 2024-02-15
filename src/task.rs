@@ -26,13 +26,17 @@ impl Task {
         let mut sched = JobScheduler::new().await.map_err(|err| Error::TaskCreationFailed(name.clone(), err.to_string()))?;
 
         for (cron, rules) in bundles {
+            debug!("Cron '{cron}' with rules '{}'", rules.join(", "));
             let instance = instance.clone();
             let copy_name = copy_name.clone();
-            let job = Job::new_async(cron.as_str(), move |_uuid, _l| {
+            let job = Job::new_async(cron.as_str(), move |_uuid, mut _l| {
                 let instance = instance.clone();
                 let rules = rules.clone();
                 let name = copy_name.clone();
+
                 Box::pin(async move {
+                    let next_tick = _l.next_tick_for_job(_uuid).await;
+                    debug!("Next tick for registry '{name}' is {:?}", next_tick.unwrap_or_default().unwrap_or_default());
                     info!("Applying rules '{}' to registry '{name}'", rules.join(", "));
                     match instance.apply_rules(rules.clone()).await {
                         Ok(_) => info!("Successfully applied rules '{}' to registry '{name}'", rules.join(", ")),

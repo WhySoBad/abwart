@@ -4,7 +4,7 @@ registries:
       age.min:
       age.max:
       revisions: 10
-      schedule: 1/5 * * * * *
+      schedule: 1/45 * * * * *
     rule:
       test:
         age.min: 30s
