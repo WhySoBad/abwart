@@ -77,21 +77,36 @@ The minimum age policy ensures all tags which are deleted are older than a given
 age.min: 10d
 ```
 
+### Tag pattern policy
+> Affection type: `Target`
+>
+> Identifier: `tag.pattern`
+>
+> Default: `.+`
+
+The tag pattern policy matches all tags by name against a regex. For regex parsing the [regex](https://docs.rs/regex/latest/regex/) crate is used.
+Any valid regex (supported by this crate) can be used.
+
+```yaml
+# Would match all tags which end in -beta or -alpha (e.g. frontend-alpha)
+tag.pattern: .+-(beta|alpha)
+```
+
 ## Repository policies
 
 Repository policies are used to determine for which images a rule should be applied
 
-### Pattern policy
+### Image pattern policy
 > Affection type: `Target`
 > 
-> Identifier: `pattern`
+> Identifier: `image.pattern`
 >
 > Default: `.+`
 
-The pattern policy matches all repositories by name against a regex. For regex parsing the [regex](https://docs.rs/regex/latest/regex/) crate is used.
+The image pattern policy matches all repositories by name against a regex. For regex parsing the [regex](https://docs.rs/regex/latest/regex/) crate is used.
 Any valid regex (supported by this crate) can be used. 
 
 ```yaml
-# Would only match images which end in -beta or -alpha (e.g. frontend-alpha)
-pattern: .+-(beta|alpha)
+# Would match all images which end in -beta or -alpha (e.g. frontend-alpha)
+image.pattern: .+-(beta|alpha)
 ```

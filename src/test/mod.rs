@@ -26,3 +26,7 @@ pub fn get_tags(raw: Vec<(impl Into<String>, Duration, u32)>) -> Vec<Tag> {
     }
     tags
 }
+
+pub fn get_tags_by_name(raw: Vec<impl Into<String>>, duration: Duration, size: u32) -> Vec<Tag> {
+    get_tags(raw.into_iter().map(|x| (x, duration.clone(), size)).collect())
+}

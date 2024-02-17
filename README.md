@@ -37,8 +37,8 @@ services:
       abwart.rule.weekend.revisions: 2
       # only run the policies of the `weekend` rule in the weekend at midnight
       abwart.rule.weekend.schedule: 0 0 0 * * Sun,Sat
-      # only apply policies of the `weekend` rule to images matching the regex pattern
-      abwart.rule.weekend.pattern: \w+-(alpha|beta)
+      # apply policies of the `weekend` rule to all images matching the regex pattern
+      abwart.rule.weekend.image.pattern: \w+-(alpha|beta)
       # only keep 10 revisions of all images stored in the registry by default
       abwart.default.revisions: 10
       # apply policies every day at midnight UTC by default
@@ -70,7 +70,7 @@ to open a new issue or contribute to an open issue!
 - [ ] Add configuration whether the garbage collector should be run inside the container
 - [x] Add tests to rule parsing and rule affections
 - [ ] Add ping to registry container in instance creation
-- [ ] Add policy to match tags by pattern
+- [x] Add policy to match tags by pattern
 
 ## Credits
 

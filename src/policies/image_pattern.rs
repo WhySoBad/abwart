@@ -3,24 +3,24 @@ use regex::Regex;
 use crate::api::repository::Repository;
 use crate::policies::{AffectionType, Policy};
 
-pub const PATTERN_LABEL: &str = "pattern";
+pub const IMAGE_PATTERN_LABEL: &str = "image.pattern";
 
 /// Policy to match all repositories whose name matches the provided
 /// regex pattern
 /// # Example
 /// ```
-/// let policy = PatternPolicy::new("test-\\w+");
+/// let policy = ImagePatternPolicy::new("test-\\w+");
 ///
 /// // returns all repositories whose name contains `test-<chars>` whereby
 /// // `<chars>` is any alphanumeric character sequence of length >= 1
 /// let affected = policy.affects(&repositories);
 /// ```
 #[derive(Debug, Clone)]
-pub struct PatternPolicy {
+pub struct ImagePatternPolicy {
     pattern: Option<Regex>
 }
 
-impl PatternPolicy {
+impl ImagePatternPolicy {
     pub fn new(value: &str) -> Self {
         if value.trim() == "" {
             return Self { pattern: None }
@@ -35,13 +35,13 @@ impl PatternPolicy {
     }
 }
 
-impl Default for PatternPolicy {
+impl Default for ImagePatternPolicy {
     fn default() -> Self {
         Self { pattern: Some(Regex::new(".*").expect("Default regex should compile")) }
     }
 }
 
-impl Policy<Repository> for PatternPolicy {
+impl Policy<Repository> for ImagePatternPolicy {
     fn affects(&self, elements: Vec<Repository>) -> Vec<Repository> {
         if let Some(pattern) = &self.pattern {
             elements.into_iter().filter(|repo| pattern.is_match(&repo.name)).collect()
@@ -55,7 +55,7 @@ impl Policy<Repository> for PatternPolicy {
     }
 
     fn id(&self) -> &'static str {
-        PATTERN_LABEL
+        IMAGE_PATTERN_LABEL
     }
 
     fn enabled(&self) -> bool {
@@ -66,14 +66,14 @@ impl Policy<Repository> for PatternPolicy {
 
 #[cfg(test)]
 mod test {
-    use crate::policies::pattern::PatternPolicy;
+    use crate::policies::image_pattern::ImagePatternPolicy;
     use crate::policies::Policy;
     use crate::test::get_repositories;
 
     #[test]
     pub fn test_matching() {
         let repositories = get_repositories(vec!["test-matching", "not-matching"]);
-        let policy = PatternPolicy::new("test-.*");
+        let policy = ImagePatternPolicy::new("test-.*");
         assert!(policy.pattern.is_some());
         assert_eq!(policy.affects(repositories.clone()), vec![repositories[0].clone()]);
     }
@@ -81,7 +81,7 @@ mod test {
     #[test]
     pub fn test_empty() {
         let repositories = get_repositories(vec!["test-matching", "not-matching"]);
-        let policy = PatternPolicy::new("");
+        let policy = ImagePatternPolicy::new("");
         assert!(policy.pattern.is_none());
         assert_eq!(policy.affects(repositories), vec![]);
     }
@@ -89,7 +89,7 @@ mod test {
     #[test]
     pub fn test_default() {
         let repositories = get_repositories(vec!["test-matching", "not-matching"]);
-        let policy = PatternPolicy::default();
+        let policy = ImagePatternPolicy::default();
         assert!(policy.pattern.is_some());
         assert_eq!(policy.affects(repositories.clone()), repositories)
     }
@@ -97,7 +97,7 @@ mod test {
     #[test]
     pub fn test_invalid_regex() {
         let repositories = get_repositories(vec!["test-matching", "not-matching"]);
-        let policy = PatternPolicy::new("([a-zA-Z]+"); // the regex is invalid
+        let policy = ImagePatternPolicy::new("([a-zA-Z]+"); // the regex is invalid
         assert!(policy.pattern.is_none());
         assert_eq!(policy.affects(repositories), vec![]);
     }

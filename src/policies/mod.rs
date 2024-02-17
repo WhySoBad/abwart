@@ -8,8 +8,9 @@ use crate::api::tag::Tag;
 
 pub mod age_max;
 pub mod age_min;
-pub mod pattern;
+pub mod image_pattern;
 pub mod revision;
+pub mod tag_pattern;
 
 pub type PolicyMap<T> = HashMap<&'static str, Box<dyn Policy<T>>>;
 

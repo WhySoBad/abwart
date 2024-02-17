@@ -13,8 +13,9 @@ use crate::{label, NAME};
 use crate::config::Config;
 use crate::policies::age_max::{AGE_MAX_LABEL, AgeMaxPolicy};
 use crate::policies::age_min::{AGE_MIN_LABEL, AgeMinPolicy};
-use crate::policies::pattern::{PATTERN_LABEL, PatternPolicy};
+use crate::policies::image_pattern::{IMAGE_PATTERN_LABEL, ImagePatternPolicy};
 use crate::policies::revision::{REVISION_LABEL, RevisionPolicy};
+use crate::policies::tag_pattern::{TAG_PATTERN_LABEL, TagPatternPolicy};
 use crate::rule::{parse_rule, parse_schedule, Rule};
 
 #[derive(Debug)]
@@ -155,7 +156,8 @@ impl Instance {
         let default_rule_pattern = Instance::get_default_rule_pattern();
         let default_rule_name = id.to_string();
         let mut default_rule = Rule::new(default_rule_name.clone());
-        default_rule.repository_policies.insert(PATTERN_LABEL, Box::<PatternPolicy>::default());
+        default_rule.repository_policies.insert(IMAGE_PATTERN_LABEL, Box::<ImagePatternPolicy>::default());
+        default_rule.tag_policies.insert(TAG_PATTERN_LABEL, Box::<TagPatternPolicy>::default());
         default_rule.tag_policies.insert(AGE_MAX_LABEL, Box::<AgeMaxPolicy>::default());
         default_rule.tag_policies.insert(AGE_MIN_LABEL, Box::<AgeMinPolicy>::default());
         default_rule.tag_policies.insert(REVISION_LABEL, Box::<RevisionPolicy>::default());
