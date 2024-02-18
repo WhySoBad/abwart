@@ -67,10 +67,11 @@ to open a new issue or contribute to an open issue!
 - [x] Publish a new image to ghcr when a new tag is created
 - [x] Add static configuration file which takes priority over label configuration. The file should have hot reload
 - [x] Add docs
-- [ ] Add configuration whether the garbage collector should be run inside the container
+- [x] Add configuration whether the garbage collector should be run inside the container
 - [x] Add tests to rule parsing and rule affections
 - [ ] Add ping to registry container in instance creation
 - [x] Add policy to match tags by pattern
+- [ ] Add policy to match tags by size
 
 ## Credits
 

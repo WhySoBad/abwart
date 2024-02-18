@@ -27,6 +27,10 @@ five of tags which were previously marked for deletion since they don't fulfil t
 
 In a sense the `Requirement` policies are stronger than the `Target` policies.
 
+> [!IMPORTANT]
+> A rule with only `Requirement` policies without any `Target` policies doesn't match anything since the `Requirement` policies are only used to filter the matches of the
+> `Target` policies and not for matching itself
+
 ## Tag policies
 
 Tag policies are used to determine which tags on an image should be marked for deletion
@@ -38,9 +42,12 @@ Tag policies are used to determine which tags on an image should be marked for d
 > 
 > Default: `15`
 
-The revision policy aims to only keep a specified amount of tags for an image in the registry. In combination with other 
-policies it can be less than the specified amount of tags is kept. When there are more tags than specified in the policy it
+The revision policy aims to only keep a specified amount of tags for an image in the registry. When there are more tags than specified in the policy it
 marks the excess ones for deletion. The tags are marked for deletion from oldest to newest (by creation date). 
+
+> [!IMPORTANT]
+> When used with other tag policies the real revision count can be higher than the specified value since there could be the case
+> where tags which would be deleted by the revision policy are filtered out by a policy of type `Requirement` which retains them from being deleted
 
 ```yaml
 # Only keep the latest 15 tags of the image

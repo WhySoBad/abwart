@@ -38,11 +38,6 @@ impl Rule{
             affected.extend(affects)
         }
 
-        if requirements.len() == self.repository_policies.len() && !requirements.is_empty() {
-            // there are no target policies and therefore every repository should be affected
-            affected.extend(repositories)
-        }
-
         let mut affected = affected.into_iter().collect::<Vec<_>>();
 
         for requirement in requirements {
@@ -65,11 +60,6 @@ impl Rule{
             let affects = policy.affects(tags.clone());
             debug!("Policy '{}' affected {} tags", policy.id(), affects.len());
             affected.extend(affects)
-        }
-
-        if requirements.len() == self.tag_policies.len() && !requirements.is_empty() {
-            // there are no target policies and therefore every tag should be affected
-            affected.extend(tags)
         }
 
         let mut affected = affected.into_iter().collect::<Vec<_>>();
@@ -282,12 +272,34 @@ mod test {
 
     #[test]
     fn test_only_target_tag_policies() {
-        todo!()
+        let labels = get_labels(vec![
+            ("tag.pattern", "test-.+")
+        ]);
+        let rule = parse_rule(String::from("test-rule"), labels);
+        assert!(rule.is_some());
+        let parsed = rule.unwrap();
+
+        let tags = get_tags_by_name(vec!["test-", "test-asdf", "not a match"], Duration::seconds(1), 1);
+        assert_eq!(parsed.affected_tags(tags.clone()), vec![tags[1].clone()]);
     }
 
     #[test]
     fn test_only_requirement_tag_policies() {
-        todo!()
+        let labels = get_labels(vec![
+            ("age.min", "10m")
+        ]);
+        let rule = parse_rule(String::from("test-rule"), labels);
+        assert!(rule.is_some());
+        let parsed = rule.unwrap();
+
+        let tags = get_tags(vec![
+            ("test", Duration::seconds(10), 10),
+            ("asdf", Duration::minutes(10), 10),
+            ("another", Duration::hours(10), 10),
+            ("new", Duration::minutes(9), 10)
+        ]);
+        // requirement policies are only used for filtering, not for matching
+        assert_eq!(parsed.affected_tags(tags.clone()), vec![]);
     }
 
     #[test]
@@ -307,12 +319,20 @@ mod test {
 
     #[test]
     fn test_only_target_repository_policies() {
-        todo!()
+        let labels = get_labels(vec![
+            ("image.pattern", "test-.+")
+        ]);
+        let rule = parse_rule(String::from("test-rule"), labels);
+        assert!(rule.is_some());
+        let parsed = rule.unwrap();
+
+        let repositories = get_repositories(vec!["test", "test-asdf", "not matching", "test-match"]);
+        assert_eq!(parsed.affected_repositories(repositories.clone()), vec![repositories[1].clone(), repositories[3].clone()])
     }
 
     #[test]
     fn test_only_requirement_repository_policies() {
-        todo!()
+        // TODO: Implement this test case as soon as there is a requirement repository policy
     }
 
     #[test]
