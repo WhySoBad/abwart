@@ -15,6 +15,7 @@ use crate::policies::age_max::{AGE_MAX_LABEL, AgeMaxPolicy};
 use crate::policies::age_min::{AGE_MIN_LABEL, AgeMinPolicy};
 use crate::policies::image_pattern::{IMAGE_PATTERN_LABEL, ImagePatternPolicy};
 use crate::policies::revision::{REVISION_LABEL, RevisionPolicy};
+use crate::policies::size::{SIZE_LABEL, SizePolicy};
 use crate::policies::tag_pattern::{TAG_PATTERN_LABEL, TagPatternPolicy};
 use crate::rule::{parse_rule, parse_schedule, Rule};
 
@@ -161,6 +162,7 @@ impl Instance {
         default_rule.tag_policies.insert(AGE_MAX_LABEL, Box::<AgeMaxPolicy>::default());
         default_rule.tag_policies.insert(AGE_MIN_LABEL, Box::<AgeMinPolicy>::default());
         default_rule.tag_policies.insert(REVISION_LABEL, Box::<RevisionPolicy>::default());
+        default_rule.tag_policies.insert(SIZE_LABEL, Box::<SizePolicy>::default());
 
         // parse default rules
         labels.iter()

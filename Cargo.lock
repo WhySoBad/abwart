@@ -16,6 +16,7 @@ dependencies = [
  "log",
  "notify",
  "notify-debouncer-mini",
+ "parse-size",
  "regex",
  "reqwest",
  "serde",
@@ -840,6 +841,12 @@ name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
+
+[[package]]
+name = "parse-size"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "944553dd59c802559559161f9816429058b869003836120e262e8caec061b7ae"
 
 [[package]]
 name = "percent-encoding"

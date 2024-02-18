@@ -24,3 +24,4 @@ dyn-clone = "1.0.16"
 serde_yaml = "0.9.29"
 notify = { version = "6.1.1", default-features = false, features = ["serde", "macos_kqueue"] }
 notify-debouncer-mini = { version = "0.4.1", default-features = false, features = ["serde"] }
+parse-size = "1.0.0"

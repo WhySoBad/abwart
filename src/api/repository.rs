@@ -144,12 +144,12 @@ impl Repository {
         for tag in raw {
             match self.get_manifest(&tag).await? {
                 ManifestResponse::Manifest(manifest) => {
-                    let size: u32 = manifest.layers.iter().map(|l| l.size).sum();
+                    let size: u64 = manifest.layers.iter().map(|l| l.size).sum();
                     let config = manifest.get_config().await?;
                     tags.push(Tag::new(tag, manifest.digest, config.created, size));
                 },
                 ManifestResponse::ManifestList(list) => {
-                    let size: u32 = list.manifests.iter().map(|m| m.size).sum();
+                    let size: u64 = list.manifests.iter().map(|m| m.size).sum();
                     let layer = list.manifests.get(0).ok_or(ApiError::EmptyManifestList)?;
                     let manifest = list.get_manifest(layer.digest.clone()).await?;
                     let config = manifest.get_config().await?;

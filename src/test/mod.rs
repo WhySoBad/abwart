@@ -18,7 +18,7 @@ pub fn get_repositories(names: Vec<impl Into<String>>) -> Vec<Repository> {
     repositories
 }
 
-pub fn get_tags(raw: Vec<(impl Into<String>, Duration, u32)>) -> Vec<Tag> {
+pub fn get_tags(raw: Vec<(impl Into<String>, Duration, u64)>) -> Vec<Tag> {
     let mut tags = vec![];
     let now = chrono::offset::Utc::now();
     for (name, offset, size) in raw {
@@ -27,6 +27,6 @@ pub fn get_tags(raw: Vec<(impl Into<String>, Duration, u32)>) -> Vec<Tag> {
     tags
 }
 
-pub fn get_tags_by_name(raw: Vec<impl Into<String>>, duration: Duration, size: u32) -> Vec<Tag> {
-    get_tags(raw.into_iter().map(|x| (x, duration.clone(), size)).collect())
+pub fn get_tags_by_name(raw: Vec<impl Into<String>>, duration: Duration, size: u64) -> Vec<Tag> {
+    get_tags(raw.into_iter().map(|x| (x, duration, size)).collect())
 }

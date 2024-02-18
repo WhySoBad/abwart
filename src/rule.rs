@@ -9,6 +9,7 @@ use crate::policies::age_min::{AGE_MIN_LABEL, AgeMinPolicy};
 use crate::policies::age_max::{AGE_MAX_LABEL, AgeMaxPolicy};
 use crate::policies::image_pattern::{IMAGE_PATTERN_LABEL, ImagePatternPolicy};
 use crate::policies::revision::{REVISION_LABEL, RevisionPolicy};
+use crate::policies::size::{SIZE_LABEL, SizePolicy};
 use crate::policies::tag_pattern::{TAG_PATTERN_LABEL, TagPatternPolicy};
 
 #[derive(Debug)]
@@ -97,6 +98,9 @@ pub fn parse_rule(name: String, policies: Vec<(String, &str)>) -> Option<Rule> {
             REVISION_LABEL => {
                 rule.tag_policies.insert(REVISION_LABEL, Box::new(RevisionPolicy::new(value.to_string())));
             },
+            SIZE_LABEL => {
+                rule.tag_policies.insert(SIZE_LABEL, Box::new(SizePolicy::new(value)));
+            }
             other => {
                 warn!("Found unknown policy '{other}' for rule '{name}'. Ignoring policy")
             }
@@ -134,6 +138,7 @@ mod test {
     use crate::policies::age_min::AGE_MIN_LABEL;
     use crate::policies::image_pattern::IMAGE_PATTERN_LABEL;
     use crate::policies::revision::REVISION_LABEL;
+    use crate::policies::size::SIZE_LABEL;
     use crate::policies::tag_pattern::TAG_PATTERN_LABEL;
     use crate::rule::{parse_rule, parse_schedule};
     use crate::test::{get_repositories, get_tags, get_tags_by_name};
@@ -230,19 +235,21 @@ mod test {
             ("image.pattern", "test-.+"),
             ("tag.pattern", "test-.+"),
             ("test", "10s"),
-            ("revisions", "10")
+            ("revisions", "10"),
+            ("size", "100 MiB")
         ]);
         let rule = parse_rule(String::from("test-rule"), labels);
         assert!(rule.is_some());
         let parsed = rule.unwrap();
         assert_eq!(parsed.name, String::from("test-rule"));
         assert_eq!(parsed.schedule, String::from("* * * * 5 *"));
-        assert_eq!(parsed.tag_policies.len(), 4);
+        assert_eq!(parsed.tag_policies.len(), 5);
         assert_eq!(parsed.repository_policies.len(), 1);
         assert!(parsed.tag_policies.get(AGE_MAX_LABEL).is_some());
         assert!(parsed.tag_policies.get(AGE_MIN_LABEL).is_some());
         assert!(parsed.tag_policies.get(REVISION_LABEL).is_some());
         assert!(parsed.tag_policies.get(TAG_PATTERN_LABEL).is_some());
+        assert!(parsed.tag_policies.get(SIZE_LABEL).is_some());
         assert!(parsed.repository_policies.get(IMAGE_PATTERN_LABEL).is_some())
     }
 
@@ -327,7 +334,9 @@ mod test {
         let parsed = rule.unwrap();
 
         let repositories = get_repositories(vec!["test", "test-asdf", "not matching", "test-match"]);
-        assert_eq!(parsed.affected_repositories(repositories.clone()), vec![repositories[1].clone(), repositories[3].clone()])
+        let mut affected = parsed.affected_repositories(repositories.clone());
+        affected.sort_by(|x, y| x.name.cmp(&y.name));
+        assert_eq!(affected, vec![repositories[1].clone(), repositories[3].clone()])
     }
 
     #[test]
@@ -401,17 +410,18 @@ mod test {
             ("schedule", "* * * * 5 *"),
             ("image.pattern", "test-.+"),
             ("tag.pattern", ".*th"),
-            ("test", "10s")
+            ("test", "10s"),
+            ("size", "1 MiB")
         ]);
         let rule = parse_rule(String::from("test-rule"), labels).unwrap();
 
         let tags = get_tags(vec![
-            ("first", Duration::hours(-5), 1_000_000),
-            ("second", Duration::minutes(-5), 1_000_000),
-            ("third", Duration::minutes(-30), 1_000_000),
-            ("fourth", Duration::minutes(-10), 1_000_000),
+            ("first", Duration::hours(-5), 1_000),
+            ("second", Duration::minutes(-5), 1_200_000),
+            ("third", Duration::minutes(-30), 1_400_000),
+            ("fourth", Duration::minutes(-10), 100_000_000),
             ("fifth", Duration::seconds(-15), 1_000_000),
-            ("sixth", Duration::minutes(-50), 1_000_000)
+            ("sixth", Duration::minutes(-50), 1_000)
         ]);
 
         let repositories = get_repositories(vec!["test-asdf", "test-", "test-test"]);
@@ -421,6 +431,6 @@ mod test {
 
         let mut affected = rule.affected_tags(tags.clone());
         affected.sort_by(|t1, t2| t1.created.cmp(&t2.created).reverse());
-        assert_eq!(affected, vec![tags[3].clone(), tags[2].clone(), tags[5].clone(), tags[0].clone()]);
+        assert_eq!(affected, vec![tags[1].clone(), tags[3].clone(), tags[2].clone(), tags[5].clone(), tags[0].clone()]);
     }
 }

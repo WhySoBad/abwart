@@ -11,6 +11,7 @@ pub mod age_min;
 pub mod image_pattern;
 pub mod revision;
 pub mod tag_pattern;
+pub mod size;
 
 pub type PolicyMap<T> = HashMap<&'static str, Box<dyn Policy<T>>>;
 
@@ -55,4 +56,8 @@ pub fn parse_duration(duration_str: String) -> Option<Duration> {
         Ok(duration_str) => Duration::from_std(duration_str.into()).ok(),
         Err(_) => None
     }
+}
+
+pub fn parse_size(size_str: &str) -> Option<u64> {
+    parse_size::parse_size(size_str).ok()
 }

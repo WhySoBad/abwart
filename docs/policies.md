@@ -99,6 +99,25 @@ Any valid regex (supported by this crate) can be used.
 tag.pattern: .+-(beta|alpha)
 ```
 
+### Size policy
+> Affection type: `Target`
+>
+> Identifier: `size`
+>
+> Default: `None`
+
+The size policy matches all tags which exceed the provided blob size. For size parsing the [parse-size](https://crates.io/crates/parse-size) crate is used. 
+Any valid size (supported by this crate) can be used
+
+>[!NOTE]
+> The library uses `MiB`, `GiB` etc. which are the binary representations instead of the usual decimal representations of the size. Therefore, `1 MiB` is `1_048_576` bytes 
+> instead of `1_000_000` bytes as one might expect
+
+```yaml
+# Would match all tags whose total blob size exceed 256 MiB  
+size: 256 MiB
+```
+
 ## Repository policies
 
 Repository policies are used to determine for which images a rule should be applied

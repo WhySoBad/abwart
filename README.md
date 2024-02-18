@@ -71,7 +71,7 @@ to open a new issue or contribute to an open issue!
 - [x] Add tests to rule parsing and rule affections
 - [ ] Add ping to registry container in instance creation
 - [x] Add policy to match tags by pattern
-- [ ] Add policy to match tags by size
+- [x] Add policy to match tags by size
 
 ## Credits
 
