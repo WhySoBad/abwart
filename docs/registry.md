@@ -18,6 +18,13 @@ This is especially useful when pushing images under the same tag in a CI/CD pipe
 since the tag is simply overwritten. This can cause abwart to not trigger any deletions which can lead to big dangling binary blobs. <br>
 The `cleanup` field expects the same syntax as the `schedule` field described in the documentation about [rules](rule.md).
 
+>[!CAUTION]
+> The garbage collector shipped with the `registry` image breaks schema 2 manifest list and the OCI image index which causes the images to be corrupted. 
+> The pull request resolving this issue was already merged in the `distribution/distribution` repository but not yet released. The progress of the issue is tracked in 
+> this [issue](https://github.com/WhySoBad/abwart/issues/2)
+> 
+> Until a registry containing the fixed garbage collector is released the use of the `cleanup` flag is **discouraged** as it potentially breaks your images 
+
 ## Defaults
 
 A registry can have default values to which policies without explicit definition in a rule fall back to.
