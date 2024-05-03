@@ -25,6 +25,10 @@ The `cleanup` field expects the same syntax as the `schedule` field described in
 > 
 > Until a registry containing the fixed garbage collector is released the use of the `cleanup` flag is **discouraged** as it potentially breaks your images 
 
+
+>[!IMPORTANT]
+> If `tidy` is set to `false` on every rule and no `cleanup` schedule is provided the blobs marked for deletion aren't actually deleted from the registry
+
 ## Defaults
 
 A registry can have default values to which policies without explicit definition in a rule fall back to.

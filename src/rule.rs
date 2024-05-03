@@ -18,11 +18,12 @@ pub struct Rule {
     pub repository_policies: PolicyMap<Repository>,
     pub tag_policies: PolicyMap<Tag>,
     pub schedule: String,
+    pub tidy: Option<bool>
 }
 
 impl Rule{
     pub fn new(name: String) -> Self {
-        Self { name, repository_policies: HashMap::new(), tag_policies: HashMap::new(), schedule: String::new() }
+        Self { name, repository_policies: HashMap::new(), tag_policies: HashMap::new(), schedule: String::new(), tidy: None }
     }
 
     /// Get all repositories which are affected by the current rule
@@ -82,6 +83,12 @@ pub fn parse_rule(name: String, policies: Vec<(String, &str)>) -> Option<Rule> {
         match policy_name.as_str() {
             "schedule" => {
                 rule.schedule = parse_schedule(value).unwrap_or_default()
+            },
+            "tidy" => {
+                rule.tidy = value.parse::<bool>().map(Some).unwrap_or_else(|_| {
+                    info!("Received invalid value for field 'tidy'. Ignoring policy");
+                    None
+                })
             },
             AGE_MAX_LABEL => {
                 rule.tag_policies.insert(AGE_MAX_LABEL, Box::new(AgeMaxPolicy::new(value.to_string())));
@@ -194,7 +201,8 @@ mod test {
         let labels = get_labels(vec![
             ("age.max", "10s"),
             ("age.min", "20m"),
-            ("schedule", "* * * * 5 *")
+            ("schedule", "* * * * 5 *"),
+            ("tidy", "false")
         ]);
         let rule = parse_rule(String::from("test-rule"), labels);
         assert!(rule.is_some());
@@ -203,6 +211,7 @@ mod test {
         assert_eq!(parsed.schedule, String::from("* * * * 5 *"));
         assert_eq!(parsed.tag_policies.len(), 2);
         assert_eq!(parsed.repository_policies.len(), 0);
+        assert_eq!(parsed.tidy, Some(false));
         assert!(parsed.tag_policies.get(AGE_MAX_LABEL).is_some());
         assert!(parsed.tag_policies.get(AGE_MIN_LABEL).is_some());
     }
@@ -213,7 +222,8 @@ mod test {
             ("age.max", "10s"),
             ("age.min", "20m"),
             ("schedule", "* * * * 5 *"),
-            ("test", "10s")
+            ("test", "10s"),
+            ("tidy", "asdf")
         ]);
         let rule = parse_rule(String::from("test-rule"), labels);
         assert!(rule.is_some());
@@ -222,6 +232,7 @@ mod test {
         assert_eq!(parsed.schedule, String::from("* * * * 5 *"));
         assert_eq!(parsed.tag_policies.len(), 2);
         assert_eq!(parsed.repository_policies.len(), 0);
+        assert_eq!(parsed.tidy, None);
         assert!(parsed.tag_policies.get(AGE_MAX_LABEL).is_some());
         assert!(parsed.tag_policies.get(AGE_MIN_LABEL).is_some());
     }
@@ -236,7 +247,8 @@ mod test {
             ("tag.pattern", "test-.+"),
             ("test", "10s"),
             ("revisions", "10"),
-            ("size", "100 MiB")
+            ("size", "100 MiB"),
+            ("tidy", "true")
         ]);
         let rule = parse_rule(String::from("test-rule"), labels);
         assert!(rule.is_some());
@@ -245,6 +257,7 @@ mod test {
         assert_eq!(parsed.schedule, String::from("* * * * 5 *"));
         assert_eq!(parsed.tag_policies.len(), 5);
         assert_eq!(parsed.repository_policies.len(), 1);
+        assert_eq!(parsed.tidy, Some(true));
         assert!(parsed.tag_policies.get(AGE_MAX_LABEL).is_some());
         assert!(parsed.tag_policies.get(AGE_MIN_LABEL).is_some());
         assert!(parsed.tag_policies.get(REVISION_LABEL).is_some());

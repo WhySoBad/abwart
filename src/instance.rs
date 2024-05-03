@@ -96,7 +96,7 @@ impl Instance {
 
         debug!("Registered new registry '{name}' with: {address}:{port} ({network:?}) {rules:?} {default_rule:?}");
 
-        let mut instance = Self{ id, port, name, rules, default_rule, distribution, cleanup_schedule, client };
+        let mut instance = Self { id, port, name, rules, default_rule, distribution, cleanup_schedule, client };
         instance.apply_defaults();
         Ok(instance)
     }
@@ -135,6 +135,9 @@ impl Instance {
             });
             if rule.schedule.is_empty() {
                 rule.schedule = self.default_rule.schedule.clone()
+            }
+            if rule.tidy.is_none() {
+                rule.tidy = Some(self.default_rule.tidy.unwrap_or(false))
             }
         });
     }
@@ -244,6 +247,7 @@ impl Instance {
 
         let mut affected_repositories = HashSet::new();
         let mut deleted_tags = 0;
+        let mut tidy = false;
         for rule in rules {
             let repositories = rule.affected_repositories(repositories.clone());
             affected_repositories.extend(repositories.iter().map(|r| r.name.clone()));
@@ -254,6 +258,9 @@ impl Instance {
                     info!("Deleting tag '{}' from repository '{}' in registry '{}'", tag.name, repository.name, self.name);
                     repository.delete_manifest(&tag.digest).await?;
                     deleted_tags += 1;
+                    if rule.tidy.is_some_and(|val| val) {
+                        tidy = true
+                    }
                 }
                 if !affected_tags.is_empty() {
                     tags.retain(|tag| !affected_tags.contains(tag))
@@ -265,8 +272,10 @@ impl Instance {
             info!("Left all repositories in registry '{}' unmodified", self.name)
         } else {
             info!("Deleted {deleted_tags} tags from {} repositories in registry '{}'", affected_repositories.len(), self.name);
-            info!("Running post deletion cleanup in registry '{}'", self.name);
-            self.run_garbage_collector().await;
+            if tidy {
+                info!("Running post deletion cleanup in registry '{}'", self.name);
+                self.run_garbage_collector().await;
+            }
         }
 
         Ok(())
