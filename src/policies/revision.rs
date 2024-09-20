@@ -1,6 +1,4 @@
-use log::info;
-use crate::api::tag::Tag;
-use crate::policies::{AffectionType, Policy, parse_integer};
+use crate::policies::{AffectionType, Policy, parse_integer, Tag};
 
 pub const REVISION_LABEL: &str = "revisions";
 
@@ -10,19 +8,20 @@ pub struct RevisionPolicy {
 }
 
 impl RevisionPolicy {
-    pub fn new(value: String) -> Self {
-        match parse_integer(value.clone()) {
+    pub fn new(value: &str) -> Result<Self, String> {
+        if value.trim().is_empty() {
+            return Ok(Self { revisions: None })
+        }
+        match parse_integer(value.to_string()) {
             Some(revisions) => {
                 if revisions == 0 {
-                    info!("Received invalid revisions value '{revisions}'. Expected non-zero positive integer");
-                    Self { revisions: None }
+                    Err(format!("received invalid revisions value '{revisions}': expected non-zero positive integer"))
                 } else {
-                    Self { revisions: Some(revisions as usize) }
+                    Ok(Self { revisions: Some(revisions as usize) })
                 }
             },
             None => {
-                info!("Received invalid revisions value '{value}'. Expected non-zero positive integer");
-                Self { revisions: None }
+                Err(format!("received invalid revisions value '{revisions}': expected non-zero positive integer"))
             }
         }
     }
@@ -66,7 +65,6 @@ impl Default for RevisionPolicy {
 #[cfg(test)]
 mod test {
     use chrono::Duration;
-    use crate::api::tag::Tag;
     use crate::policies::Policy;
     use crate::policies::revision::RevisionPolicy;
     use crate::test::get_tags;

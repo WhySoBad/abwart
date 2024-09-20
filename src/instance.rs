@@ -101,24 +101,24 @@ impl Instance {
         Ok(instance)
     }
 
-    pub async fn from_actor(actor: EventActor, client: Arc<Docker>, config: Arc<Mutex<Config>>) -> Result<Instance, Error> {
-        let id = actor.id.ok_or(Error::MissingId)?;
-        let container = client.inspect_container(id.as_str(), None).await.map_err(|_| Error::InexistentContainer(id.clone()))?;
-        let name = container.name.unwrap_or(id.clone())[1..].to_string();
-        let registry_config = config.lock().map_err(|_| Error::ConfigLockError())?.get_registry(&name).unwrap_or_default();
-        let mut labels = actor.attributes.unwrap_or_default();
-        labels.extend(registry_config);
-        Self::new(id, name, labels, container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
-    }
-
-    pub fn from_container(container: ContainerSummary, client: Arc<Docker>, config: Arc<Mutex<Config>>) -> Result<Instance, Error> {
-        let id = container.id.ok_or(Error::MissingId)?;
-        let name = container.names.unwrap_or(Vec::new()).get(0).unwrap_or(&id).clone()[1..].to_string();
-        let registry_config = config.lock().map_err(|_| Error::ConfigLockError())?.get_registry(&name).unwrap_or_default();
-        let mut labels = container.labels.unwrap_or_default();
-        labels.extend(registry_config);
-        Self::new(id, name, labels, container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
-    }
+    // pub async fn from_actor(actor: EventActor, client: Arc<Docker>, config: Arc<Mutex<Config>>) -> Result<Instance, Error> {
+    //     let id = actor.id.ok_or(Error::MissingId)?;
+    //     let container = client.inspect_container(id.as_str(), None).await.map_err(|_| Error::InexistentContainer(id.clone()))?;
+    //     let name = container.name.unwrap_or(id.clone())[1..].to_string();
+    //     let registry_config = config.lock().map_err(|_| Error::ConfigLockError())?.get_registry(&name).unwrap_or_default();
+    //     let mut labels = actor.attributes.unwrap_or_default();
+    //     labels.extend(registry_config);
+    //     Self::new(id, name, labels, container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
+    // }
+    // 
+    // pub fn from_container(container: ContainerSummary, client: Arc<Docker>, config: Arc<Mutex<Config>>) -> Result<Instance, Error> {
+    //     let id = container.id.ok_or(Error::MissingId)?;
+    //     let name = container.names.unwrap_or(Vec::new()).get(0).unwrap_or(&id).clone()[1..].to_string();
+    //     let registry_config = config.lock().map_err(|_| Error::ConfigLockError())?.get_registry(&name).unwrap_or_default();
+    //     let mut labels = container.labels.unwrap_or_default();
+    //     labels.extend(registry_config);
+    //     Self::new(id, name, labels, container.network_settings.ok_or(Error::MissingNetworks)?.networks.unwrap_or_default(), client)
+    // }
 
     /// Apply the `default_tag_policies`, `default_repository_policies` and `default_schedule` to the rules in the current instance
     fn apply_defaults(&mut self) {

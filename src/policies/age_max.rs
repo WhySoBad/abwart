@@ -1,7 +1,5 @@
 use chrono::{Duration, Utc};
-use log::info;
-use crate::api::tag::Tag;
-use crate::policies::{AffectionType, parse_duration, Policy};
+use crate::policies::{AffectionType, parse_duration, Policy, Tag};
 
 pub const AGE_MAX_LABEL: &str = "age.max";
 
@@ -19,15 +17,15 @@ pub struct AgeMaxPolicy {
 }
 
 impl AgeMaxPolicy {
-    pub fn new(value: String) -> Self {
-        if value.is_empty() {
-            Self { age: None }
+    pub fn new(value: &str) -> Result<Self, String> {
+        if value.trim().is_empty() {
+            Ok(Self { age: None })
         } else {
-            let age = parse_duration(value.clone());
+            let age = parse_duration(value.to_string());
             if age.is_none() {
-                info!("Received invalid max age duration '{value}'")
+                Err(format!("received invalid max age duration '{value}'"))?;
             }
-            Self { age }
+            Ok(Self { age })
         }
     }
 }
@@ -58,9 +56,8 @@ impl Policy<Tag> for AgeMaxPolicy {
 #[cfg(test)]
 mod test {
     use chrono::Duration;
-    use crate::api::tag::Tag;
     use crate::policies::age_max::AgeMaxPolicy;
-    use crate::policies::Policy;
+    use crate::policies::{Policy, Tag};
     use crate::test::get_tags;
 
     fn get_current_tags() -> Vec<Tag> {

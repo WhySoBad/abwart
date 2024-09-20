@@ -1,6 +1,4 @@
-use log::info;
-use crate::api::tag::Tag;
-use crate::policies::{AffectionType, parse_size, Policy};
+use crate::policies::{AffectionType, parse_size, Policy, Tag};
 
 pub const SIZE_LABEL: &str = "size";
 
@@ -18,15 +16,15 @@ pub struct SizePolicy {
 }
 
 impl SizePolicy {
-    pub fn new(value: &str) -> Self {
-        if value.is_empty() {
-            Self { size: None }
+    pub fn new(value: &str) -> Result<Self, String> {
+        if value.trim().is_empty() {
+            Ok(Self { size: None })
         } else {
             let size = parse_size(value);
             if size.is_none() {
-                info!("Received invalid size '{value}'")
+                Err(format!("received invalid size '{value}'"))?;
             }
-            Self { size }
+            Ok(Self { size })
         }
     }
 }
@@ -56,8 +54,7 @@ impl Policy<Tag> for SizePolicy {
 #[cfg(test)]
 mod test {
     use chrono::Duration;
-    use crate::api::tag::Tag;
-    use crate::policies::Policy;
+    use crate::policies::{Policy, Tag};
     use crate::policies::size::SizePolicy;
     use crate::test::get_tags;
 

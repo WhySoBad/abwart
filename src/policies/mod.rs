@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use duration_string::DurationString;
 use dyn_clone::DynClone;
-use crate::api::repository::Repository;
-use crate::api::tag::Tag;
 
 pub mod age_max;
 pub mod age_min;
@@ -14,6 +12,24 @@ pub mod tag_pattern;
 pub mod size;
 
 pub type PolicyMap<T> = HashMap<&'static str, Box<dyn Policy<T>>>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Tag {
+    /// Name of the tag
+    pub name: String,
+    /// Digest of the tag
+    pub digest: String,
+    /// Timestamp when the tag was created
+    pub created: DateTime<Utc>,
+    /// Size of the tag in bytes
+    pub size: u64
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Repository {
+    /// Name of the image repository
+    pub name: String
+}
 
 #[derive(Eq, PartialEq)]
 pub enum AffectionType {

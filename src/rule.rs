@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use cron::Schedule;
 use log::{debug, info, warn};
-use crate::api::repository::Repository;
-use crate::api::tag::Tag;
-use crate::policies::{AffectionType, PolicyMap};
+use crate::policies::{AffectionType, Policy, PolicyMap, Repository, Tag};
 use crate::policies::age_min::{AGE_MIN_LABEL, AgeMinPolicy};
 use crate::policies::age_max::{AGE_MAX_LABEL, AgeMaxPolicy};
 use crate::policies::image_pattern::{IMAGE_PATTERN_LABEL, ImagePatternPolicy};
@@ -12,18 +10,119 @@ use crate::policies::revision::{REVISION_LABEL, RevisionPolicy};
 use crate::policies::size::{SIZE_LABEL, SizePolicy};
 use crate::policies::tag_pattern::{TAG_PATTERN_LABEL, TagPatternPolicy};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Rule {
+    /// Name of the rule
     pub name: String,
+    /// Policies affecting repositories
     pub repository_policies: PolicyMap<Repository>,
+    /// Policies affecting tags
     pub tag_policies: PolicyMap<Tag>,
+    /// Schedule in which the rule is executed
     pub schedule: String,
+    /// Boolean whether the garbage collector should be ran after
+    /// this rule was executed
     pub tidy: Option<bool>
 }
 
-impl Rule{
+impl Default for Rule {
+    fn default() -> Self {
+        let mut repository_policies = PolicyMap::<Repository>::new();
+        let mut tag_policies = PolicyMap::<Tag>::new();
+
+        repository_policies.insert(IMAGE_PATTERN_LABEL, Box::<ImagePatternPolicy>::default());
+        tag_policies.insert(TAG_PATTERN_LABEL, Box::<TagPatternPolicy>::default());
+        tag_policies.insert(AGE_MAX_LABEL, Box::<AgeMaxPolicy>::default());
+        tag_policies.insert(AGE_MIN_LABEL, Box::<AgeMinPolicy>::default());
+        tag_policies.insert(REVISION_LABEL, Box::<RevisionPolicy>::default());
+        tag_policies.insert(SIZE_LABEL, Box::<SizePolicy>::default());
+
+        Self {
+            name: String::new(),
+            repository_policies,
+            tag_policies,
+            schedule: String::new(),
+            tidy: None
+        }
+    }
+}
+
+impl Rule {
     pub fn new(name: String) -> Self {
-        Self { name, repository_policies: HashMap::new(), tag_policies: HashMap::new(), schedule: String::new(), tidy: None }
+        Self { name, repository_policies: HashMap::new(), tag_policies: HashMap::new(), ..Default::default() }
+    }
+
+    /// Extend the current rule with more rule labels
+    ///
+    /// The main usecase of this is when we have a cloned rule containing the defaults of a registry
+    /// and we want to extend the default with the policies of a specific rule. For this we have to
+    /// first update the name using the `[Self::set_name()]` method
+    pub fn extend_with_labels(&mut self, labels: &HashMap<String, String>) {
+        let name = &self.name;
+        labels.iter().for_each(|(policy_name, value)| {
+            match policy_name.as_str() {
+                "schedule" => {
+                    // TODO: Only update if explicitly set
+                    self.schedule = parse_schedule(&value).unwrap_or_default()
+                },
+                "tidy" => {
+                    // TODO: Only update if explicitly set
+                    self.tidy = value.parse::<bool>().map(Some).unwrap_or_else(|_| {
+                        info!("received invalid value for field 'tidy' on rule '{name}': ignoring policy");
+                        None
+                    })
+                },
+                AGE_MAX_LABEL => {
+                    match AgeMaxPolicy::new(value) {
+                        Ok(policy) => { self.tag_policies.insert(AGE_MAX_LABEL, Box::new(policy)); },
+                        Err(err) => warn!("unable to add max age policy to rule '{name}': {err}")
+                    };
+                },
+                AGE_MIN_LABEL => {
+                    match AgeMinPolicy::new(value) {
+                        Ok(policy) => { self.tag_policies.insert(AGE_MIN_LABEL, Box::new(policy)); },
+                        Err(err) => warn!("unable to add min age policy to rule '{name}': {err}")
+                    };
+                },
+                IMAGE_PATTERN_LABEL => {
+                    match ImagePatternPolicy::new(value) {
+                        Ok(policy) => { self.repository_policies.insert(IMAGE_PATTERN_LABEL, Box::new(policy)); },
+                        Err(err) => warn!("unable to add image pattern policy to rule '{name}': {err}")
+                    };
+                },
+                TAG_PATTERN_LABEL => {
+                    match TagPatternPolicy::new(value) {
+                        Ok(policy) => { self.tag_policies.insert(TAG_PATTERN_LABEL, Box::new(policy)); },
+                        Err(err) => warn!("unable to add tag pattern policy to rule '{name}': {err}")
+                    };
+                }
+                REVISION_LABEL => {
+                    match RevisionPolicy::new(value) {
+                        Ok(policy) => { self.tag_policies.insert(REVISION_LABEL, Box::new(policy)); },
+                        Err(err) => warn!("unable to add revision policy to rule '{name}': {err}")
+                    };
+                },
+                SIZE_LABEL => {
+                    match SizePolicy::new(value) {
+                        Ok(policy) => { self.tag_policies.insert(SIZE_LABEL, Box::new(policy)); },
+                        Err(err) => warn!("unable to add size policy to rule '{name}': {err}")
+                    };
+                }
+                other => {
+                    warn!("found unknown policy '{other}' for rule '{name}': ignoring policy")
+                }
+            };
+        });
+    }
+
+    /// Update the name of the rule
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    /// Get whether the rule contains any policies or not
+    pub fn contains_policies(&self) -> bool {
+        !self.repository_policies.is_empty() || !self.tag_policies.is_empty()
     }
 
     /// Get all repositories which are affected by the current rule
@@ -36,7 +135,7 @@ impl Rule{
                 continue
             }
             let affects = policy.affects(repositories.clone());
-            debug!("Policy '{}' affected {} repositories", policy.id(), affects.len());
+            debug!("policy '{}' affected {} repositories", policy.id(), affects.len());
             affected.extend(affects)
         }
 
@@ -60,7 +159,7 @@ impl Rule{
                 continue
             }
             let affects = policy.affects(tags.clone());
-            debug!("Policy '{}' affected {} tags", policy.id(), affects.len());
+            debug!("policy '{}' affected {} tags", policy.id(), affects.len());
             affected.extend(affects)
         }
 
@@ -77,50 +176,50 @@ impl Rule{
 
 /// Parse a rule by all it's associated labels. Returns `None` should the parsed rule neither contain
 /// any tag policies nor any repository policies
-pub fn parse_rule(name: String, policies: Vec<(String, &str)>) -> Option<Rule> {
-    let mut rule = Rule::new(name.clone());
-    policies.into_iter().for_each(|(policy_name, value)| {
-        match policy_name.as_str() {
-            "schedule" => {
-                rule.schedule = parse_schedule(value).unwrap_or_default()
-            },
-            "tidy" => {
-                rule.tidy = value.parse::<bool>().map(Some).unwrap_or_else(|_| {
-                    info!("Received invalid value for field 'tidy'. Ignoring policy");
-                    None
-                })
-            },
-            AGE_MAX_LABEL => {
-                rule.tag_policies.insert(AGE_MAX_LABEL, Box::new(AgeMaxPolicy::new(value.to_string())));
-            },
-            AGE_MIN_LABEL => {
-                rule.tag_policies.insert(AGE_MIN_LABEL, Box::new(AgeMinPolicy::new(value.to_string())));
-            },
-            IMAGE_PATTERN_LABEL => {
-                rule.repository_policies.insert(IMAGE_PATTERN_LABEL, Box::new(ImagePatternPolicy::new(value)));
-            },
-            TAG_PATTERN_LABEL => {
-                rule.tag_policies.insert(TAG_PATTERN_LABEL, Box::new(TagPatternPolicy::new(value)));
-            }
-            REVISION_LABEL => {
-                rule.tag_policies.insert(REVISION_LABEL, Box::new(RevisionPolicy::new(value.to_string())));
-            },
-            SIZE_LABEL => {
-                rule.tag_policies.insert(SIZE_LABEL, Box::new(SizePolicy::new(value)));
-            }
-            other => {
-                warn!("Found unknown policy '{other}' for rule '{name}'. Ignoring policy")
-            }
-        };
-    });
-
-    if rule.tag_policies.is_empty() && rule.repository_policies.is_empty() && rule.schedule.is_empty() {
-        info!("Rule {name} doesn't contain any policies. Ignoring rule");
-        None
-    } else {
-        Some(rule)
-    }
-}
+// pub fn parse_rule(name: String, policies: Vec<(String, &str)>) -> Option<Rule> {
+//     let mut rule = Rule::new(name.clone());
+//     policies.into_iter().for_each(|(policy_name, value)| {
+//         match policy_name.as_str() {
+//             "schedule" => {
+//                 rule.schedule = parse_schedule(value).unwrap_or_default()
+//             },
+//             "tidy" => {
+//                 rule.tidy = value.parse::<bool>().map(Some).unwrap_or_else(|_| {
+//                     info!("received invalid value for field 'tidy': ignoring policy");
+//                     None
+//                 })
+//             },
+//             AGE_MAX_LABEL => {
+//                 rule.tag_policies.insert(AGE_MAX_LABEL, Box::new(AgeMaxPolicy::new(value)));
+//             },
+//             AGE_MIN_LABEL => {
+//                 rule.tag_policies.insert(AGE_MIN_LABEL, Box::new(AgeMinPolicy::new(value)));
+//             },
+//             IMAGE_PATTERN_LABEL => {
+//                 rule.repository_policies.insert(IMAGE_PATTERN_LABEL, Box::new(ImagePatternPolicy::new(value)));
+//             },
+//             TAG_PATTERN_LABEL => {
+//                 rule.tag_policies.insert(TAG_PATTERN_LABEL, Box::new(TagPatternPolicy::new(value)));
+//             }
+//             REVISION_LABEL => {
+//                 rule.tag_policies.insert(REVISION_LABEL, Box::new(RevisionPolicy::new(value)));
+//             },
+//             SIZE_LABEL => {
+//                 rule.tag_policies.insert(SIZE_LABEL, Box::new(SizePolicy::new(value)));
+//             }
+//             other => {
+//                 warn!("found unknown policy '{other}' for rule '{name}': ignoring policy")
+//             }
+//         };
+//     });
+// 
+//     if rule.tag_policies.is_empty() && rule.repository_policies.is_empty() && rule.schedule.is_empty() {
+//         info!("rule {name} does not contain any policies: ignoring rule");
+//         None
+//     } else {
+//         Some(rule)
+//     }
+// }
 
 /// Parse a cron schedule string
 /// # Example
@@ -132,7 +231,7 @@ pub fn parse_schedule(schedule_str: &str) -> Option<String> {
         Some(schedule_str.to_string())
     } else {
         if !schedule_str.is_empty() {
-            warn!("Received invalid schedule '{schedule_str}'");
+            warn!("received invalid schedule '{schedule_str}'");
         }
         None
     }

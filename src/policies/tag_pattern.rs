@@ -1,7 +1,5 @@
-use log::info;
 use regex::Regex;
-use crate::api::tag::Tag;
-use crate::policies::{AffectionType, Policy};
+use crate::policies::{AffectionType, Policy, Tag};
 
 pub const TAG_PATTERN_LABEL: &str = "tag.pattern";
 
@@ -21,16 +19,13 @@ pub struct TagPatternPolicy {
 }
 
 impl TagPatternPolicy {
-    pub fn new(value: &str) -> Self {
-        if value.trim() == "" {
-            return Self { pattern: None }
+    pub fn new(value: &str) -> Result<Self, String> {
+        if value.trim().is_empty() {
+            return Ok(Self { pattern: None })
         }
         match Regex::new(value) {
-            Ok(regex) => Self { pattern: Some(regex) },
-            Err(err) => {
-                info!("Received invalid pattern '{value}'. Reason: {err}");
-                Self { pattern: None }
-            }
+            Ok(regex) => Ok(Self { pattern: Some(regex) }),
+            Err(err) => Err(format!("received invalid pattern '{value}': {err}"))
         }
     }
 }

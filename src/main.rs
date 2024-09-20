@@ -3,15 +3,19 @@ mod scheduler;
 mod error;
 mod task;
 mod rule;
-mod api;
 mod policies;
 mod config;
+mod registry;
+mod docker;
 #[cfg(test)]
 mod test;
+mod daemon;
 
 use bollard::container::ListContainersOptions;
 use bollard::system::EventsOptions;
 use bollard::{API_DEFAULT_VERSION, Docker};
+use config::ConfigWatcher;
+use docker::{get_docker_client, DockerClient};
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::process::exit;
@@ -30,60 +34,35 @@ pub const NAME: &str = "abwart";
 async fn main() {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let docker: Arc<Docker>;
-    match Docker::connect_with_unix("/var/run/docker.sock", 30, API_DEFAULT_VERSION) {
-        Ok(client) => {
-            match client.ping().await {
-                Ok(_) => docker = Arc::new(client),
-                Err(_) => {
-                    error!("Ping to docker client failed");
-                    exit(1)
-                }
-            }
-        },
+    let docker = match DockerClient::new().await {
+        Ok(client) => Arc::new(client),
         Err(err) => {
-            error!("Unable to connect to docker socket. Reason: {err}");
-            exit(1)
-        }
-    }
-
-    let config = match Config::parse() {
-        Ok(config) => {
-            if !config.is_empty() {
-                info!("Using config from static configuration file at '{}'", Config::path())
-            }
-            Arc::new(Mutex::new(config))
-        },
-        Err(err) => {
-            error!("Error whilst parsing static configuration file. Reason: {err}");
-            Arc::new(Mutex::new(Config::default()))
+            error!("unable to create docker client: {err}");
+            exit(1);
         }
     };
-
-    let mut filters = HashMap::new();
-    filters.insert(String::from("label"), vec![format!("{}=true", label("enable"))]);
-
+    let watcher = match ConfigWatcher::new() {
+        Ok(watcher) => Some(watcher),
+        Err(err) => {
+            warn!("unable to create new config watcher: {err}");
+            None
+        }
+    };
     let mut scheduler = Scheduler::new();
 
-    let options = ListContainersOptions {
-        filters,
-        ..ListContainersOptions::default()
-    };
-    let containers = docker.list_containers(Some(options)).await
-        .map_err(|err| error!("Unable to get existing running registries. Reason: {err}"))
-        .unwrap_or_default();
+    let containers = docker.get_containers().await.unwrap_or_else(|err| {
+        error!("unable to get running containers: {err}");
+        vec![]
+    });
 
     for container in containers {
-        if !&container.image.clone().unwrap_or_default().starts_with("registry") {
-            warn!("Potentially found running container which is enabled and doesn't use image 'registry'");
-        }
-        match Instance::from_container(container, docker.clone(), config.clone()) {
-            Ok(instance) => scheduler.schedule_instance(instance, ScheduleReason::RegistryRunning).await,
-            Err(err) => error!("Unable to add registry to schedule. Reason: {err}")
+        let image = container.image.clone().unwrap_or_default();
+        if !image.starts_with("registry") && !image.starts_with("distribution") {
+            warn!("found running container which potentially does not use 'registry' or 'distribution' image: instead found '{image}'");
         }
     }
 
-    subscribe_events(docker, config, scheduler).await;
+    // subscribe_events(docker, config, scheduler).await;
 }
 
 async fn subscribe_events(docker: Arc<Docker>, config: Arc<Mutex<Config>>, mut scheduler: Scheduler) {
@@ -122,13 +101,13 @@ async fn handle_event(event: &Result<EventMessage, bollard::errors::Error>, sche
             match action.as_str() {
                 "stop" | "pause" | "kill" => {
                     match actor.id {
-                        Some(id) => { scheduler.deschedule_instance(id, DescheduleReason::RegistryStop).await; },
+                        Some(id) => { scheduler.deschedule_registry(id, DescheduleReason::RegistryStop).await; },
                         None => println!("Unable to request deschedule of registry. Reason: {}", Error::MissingId)
                     }
                 }
                 "start" | "unpause" => {
                     match Instance::from_actor(actor, docker.clone(), config).await {
-                        Ok(instance) => scheduler.schedule_instance(instance, ScheduleReason::RegistryStart).await,
+                        Ok(instance) => scheduler.schedule_registry(instance, ScheduleReason::RegistryStart).await,
                         Err(err) => error!("Unable to add new registry to schedule. Reason: {err}")
                     }
                 }
@@ -146,7 +125,7 @@ async fn handle_config_update(new_config: &Config, scheduler: &mut Scheduler, do
             let new_registries = new_config.get_registries();
             let updatable = config.get_registries().iter()
                 .filter(|(key, old_value)| new_registries.get(*key).map_or(true, |v| old_value.ne(&v)))
-                .filter_map(|(key, _)| scheduler.get_instance(key))
+                .filter_map(|(key, _)| scheduler.get_registry(key))
                 .collect::<Vec<String>>();
 
             *config = new_config.clone();
@@ -174,9 +153,9 @@ async fn handle_config_update(new_config: &Config, scheduler: &mut Scheduler, do
             Ok(containers) => {
                 for container in containers {
                     let id = container.id.clone().unwrap_or_default();
-                    scheduler.deschedule_instance(id, DescheduleReason::ConfigUpdate).await;
+                    scheduler.deschedule_registry(id, DescheduleReason::ConfigUpdate).await;
                     match Instance::from_container(container, docker.clone(), config.clone()) {
-                        Ok(instance) => scheduler.schedule_instance(instance, ScheduleReason::ConfigUpdate).await,
+                        Ok(instance) => scheduler.schedule_registry(instance, ScheduleReason::ConfigUpdate).await,
                         Err(err) => error!("Unable to create instance from container. Reason: {err}")
                     }
                 }
